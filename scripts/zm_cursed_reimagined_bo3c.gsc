@@ -1,8 +1,44 @@
 // BO7 Zombies (Kronos) - Fresh Cursed Rules, independent standalone GSC.
 // Three supported gametypes only: Cursed, Cursed Survival, Mister Peeks Mayhem.
 // No legacy progression, rarity, Arsenal, wall-weapon, or HUD modifications.
+// BO3 HEALTH COMPATIBLE EDITION - requires bo3_health.gsc.
 // SOURCE BUILD: not compiled or runtime tested; verify in an offline game.
 //
+// ===== BO3-COMPATIBLE EDITION (v3.35, load together with bo3_health.gsc) =====
+// Same gameplay as the standard v3.35 build except where bo3_health.gsc owns
+// the system (bo3_health.gsc itself is not modified):
+//  - Player health / Juggernog / zombie melee damage: bo3_health.gsc. It sets
+//    level.var_9209eecc9aff21ad (stock flag: no round damage scaling at all,
+//    damage_scaling_round returns early) and dvar zombie_melee_damage_override
+//    50, so zombie melee damage is already flat for every round. The v3.35
+//    constant-tier hook is installed but steps aside while that flag is set
+//    (no double scaling, BO3 values kept); it only takes over if this file
+//    is ever loaded without bo3_health.gsc.
+//  - Armor: none. bo3_health.gsc forces level.allowarmor 0 and the no-armor
+//    modifier ON every 0.05 s. This file no longer writes zmmodenoarmor
+//    (the standard build sets it to 0 every 0.1 s = constant tug-of-war),
+//    gives 0 starting armor (also on saved-round loads), clears armor after
+//    spawn, hides the armor HUD, and binds armor wall-buys (incl. golden
+//    armor) to a blocked purchase with a hidden prompt.
+//  - Everything else (PaP + rarity, box, wall-buys + white chalk, Arsenal,
+//    1911 / knife builds, classic 1911 + knife damage, GobbleGums, Field
+//    Upgrades, Pack Mule, map Wonder Weapons) is identical to the standard.
+// Update (v3.35-bo3c): + Synced with standard v3.32-v3.35 (classic knife
+//                    hits-to-kill, white wall-buy chalk + wider wall lock,
+//                    stock Mister Peeks chance, constant damage tier, map
+//                    Wonder Weapon one-hit at PaP III+)
+//                  - v3.29 Mister Peeks 5% override dropped (standard v3.33)
+//                  ~ Armor: dead armor-purchase code removed; bo3 armor path kept
+// Update (v3.35):  + Zombie attack damage constant for the whole match: normal
+//                    zombies always use the stock round-11 tier (the tier of
+//                    rounds 11-30; stock round 31 starts the next tier), from
+//                    round 1 to any round. Specials / elites / bosses: rounds
+//                    1-10 use their round-11 tier (rev. B), stock from round 11.
+//                    Zombie health, speed, spawning untouched.
+//                  + Map Wonder Weapons at Pack-a-Punch III+ kill normal
+//                    (unarmored) zombies in one damaging hit at any round:
+//                    Necrofluid Gauntlet, Nekomancer, Jotunn Star, Blundergat,
+//                    LGM-1, Warden's Blight. Ray Gun / Ray Gun Mk 2 unchanged.
 // Update (rev. B): + Rounds 1-10 use the stock round-11 zombie attack damage tier
 //                  + Players start with 0 GobbleGums loaded (was 3)
 // Update (rev. C): - Removed forced 1911 "The Classic" blueprint swap
@@ -10,19 +46,24 @@
 // Update (rev. D): + White, non-PaP 1911 damage on normal zombies uses fixed
 //                    classic BO1 values by hit location (8 leg shots survive,
 //                    knife finishes; chest x1.25, abdomen x1.1, head x3.5)
+// Update (v3.32):  + Classic white wall-buy chalk: every weapon wall-buy shows the
+//                    scriptable's "base" (white / Common) chalk state; the wall's
+//                    real rarity (Green lock), cost and purchases are unchanged.
+//                    Armor walls and the Mystery Box are not touched.
+//                  ~ Wall lock now also covers walls spawned outside the content
+//                    manager (level.a_s_wallbuy_locations: Survival, boss arena,
+//                    modifier respawns) and walls re-coloured by Hornet's
+//                    assault-round feature toggle (1 s light sweep, no per-frame)
 // Update (v3.3):   - Arsenal: pressing Use can briefly put a non-gun (use gesture /
 //                    hands) in getcurrentweapon(); the target is now the held
 //                    primary (getcurrentprimaryweapon fallback)
-// ===== BO3-COMPATIBLE EDITION (v3.30 trimmed to run next to bo3_health.gsc) =====
-// Update (v3.30):  - FIX: armor wall-buys (incl. golden armor) could still be
-//                    bought; they are now blocked and their prompt is hidden
-// Update (v3.29):  ~ Mister Peeks egg chance 5% per round in all three modes
-// Load together with the user's standalone bo3_health.gsc.
-// - Removed: forcing the no-armor modifier OFF (bo3_health turns it ON),
-//   custom armor wall-buys, early-round zombie damage tier, save-load armor
-//   restore
-// ~ No starting armor kept, now always 0, armor cleared at spawn and the
-//   armor HUD hidden (bo3_health disables armor but would still show it)
+// Update (v3.34):  + Classic BO1-BO3 starting knife: White, non-PaP knife on normal
+//                    zombies follows the classic hits-to-kill table (150 dmg vs
+//                    classic round health), same for every hit location and for
+//                    primary / alternate attack; replaces the Mocha Maul
+//                    one-hit only for that knife
+// Update (v3.33):  - Mister Peeks spawn/egg chance override removed completely
+//                    (stock Mister Peeks behaviour)
 // Update (v3.28):  - FIX: save & quit -> continue no longer removes armor (saved
 //                    armor restored by the stock function on saved-round loads)
 // Update (v3.27):  ~ Legacy Pack Mule: legacy weapons also recognised from the
@@ -153,6 +194,7 @@ function init()
     }
 
     level callback::add( #"player_spawned", &on_player_spawned );
+    level callback::add( "on_variant_wallbuy_spawn", &on_armor_wall_spawned );
 
     // PaP IV in some configurations has a menu item with mismatched tier=3.
     // The fallback applies only when the menu identifies the level4 item.
@@ -162,19 +204,23 @@ function init()
     level callback::add( #"player_connect", &on_player_connect_gobblegums );
 
     level thread maintain_pap_and_starting_armor();
+    level thread bind_armor_walls();
     level thread unlock_map_wonder_weapons();
 
-    // BO3-COMPATIBLE: early-round zombie damage tier removed; bo3_health.gsc
-    // (separate file) handles health and damage. Armor wall-buys are bound to
-    // a blocked purchase + hidden prompt (bo3_armor_wall_*), see below.
-    level callback::add( "on_variant_wallbuy_spawn", &on_armor_wall_spawned );
-    level thread bind_armor_walls();
+    // NEW: early-round zombie attack damage tier (see section below).
+    level thread install_early_round_damage_tier();
+
+    // v3.35: map Wonder Weapons one-hit normal zombies at PaP III+ (see section).
+    install_ww_instakill();
 
     // rev. C: starting 1911 uses the player's own Zombie Build (see section below).
     level thread install_starting_1911_build_hook();
 
     // rev. D: classic BO1 white-1911 damage by hit location (see section at the end).
     level zombie_utils::register_zombie_weapon_damage_callback( "sat_pi_alcor_mp", &classic_1911_leg_damage );
+
+    // v3.34: classic BO1-BO3 starting knife hits-to-kill (see section after rev. D).
+    level zombie_utils::register_zombie_agent_damage_callback( &classic_knife_damage );
 
     // v3: weapon progression overhaul (see section at the end).
     level callback::add( "zm_packed_weapon", &on_packed_weapon_rarity );
@@ -251,24 +297,6 @@ function private pap_four_fallback( channel, menuitemindex )
     purchasemenu::function_93f934ea2f1c06f8( 1 );
 }
 
-// v3.28: zm_armor::zm_give_starting_armor() (the stock hook this replaces)
-// returns the SAVED armor when a save file is loaded. Always returning
-// [ 0, 0 ] made save & quit -> continue lose all armor, so a saved-round
-// load now goes through the stock function; every other spawn stays empty.
-function private loading_saved_round()
-{
-    return utility::issharedfuncdefined( #"zombie", #"is_loading_saved_round" ) && istrue( utility::callsharedfunc( #"zombie", #"is_loading_saved_round" ) );
-}
-
-function private empty_starting_armor( player )
-{
-    if ( loading_saved_round() && isdefined( player ) )
-    {
-        return player zm_armor::zm_give_starting_armor( player );
-    }
-    return [ 0, 0 ];
-}
-
 function private maintain_pap_and_starting_armor()
 {
     level endon( #"game_ended" );
@@ -277,8 +305,7 @@ function private maintain_pap_and_starting_armor()
         // Stock scripts can reset max PaP from 4 to 3 for lower relic tiers.
         level.get_pap_cost_override = &pap_price;
         level.max_pack_a_punch_level = 4;
-        // BO3-COMPATIBLE: no starting armor at all (stock hook zm_give_starting_armor
-        // otherwise hands out level-1 armor + plates that BO3 health ignores).
+        // BO3: no starting armor at all, including saved-round loads.
         level.startingarmoroverridefunc = &bo3_no_starting_armor;
         // v3: stock Arsenal rarity upgrades refuse (no charge) at max 0;
         // stock relic setup otherwise sets 4 or 5.
@@ -287,14 +314,6 @@ function private maintain_pap_and_starting_armor()
         // has an entry for the next rarity (can_player_use_type); empty =
         // the store picks another item instead (no wasted purchase).
         level.var_a90df52f7134ce0 = [];
-        // v3.29: Mister Peeks egg chance 5% per round in all three modes.
-        // zm_relic_mrp_events::on_round_start() rolls
-        // percent_chance( level.relic_mrp_event_bundle.spawnchance * 100 )
-        // each round (bundle value: 10% Cursed / 30% Mister Peeks Mayhem).
-        if ( isdefined( level.relic_mrp_event_bundle ) )
-        {
-            level.relic_mrp_event_bundle.spawnchance = 0.05;
-        }
         // v3.23: Field Upgrades always need 40 kills.
         // field_upgrades::function_547d8d27c323ad0() (the points-needed func
         // ZM puts on every Field Upgrade) returns level.var_750a1cea39c9abc8
@@ -309,6 +328,7 @@ function private maintain_pap_and_starting_armor()
             level.var_750a1cea39c9abc8 = 40;
         }
 
+        // BO3: zmmodenoarmor is NOT written here - bo3_health.gsc keeps it ON.
         wait 0.10;
     }
 }
@@ -320,8 +340,8 @@ function private on_player_spawned( params )
     {
         return;
     }
-
-    // BO3-COMPATIBLE: remove the armor the HUD would still show and hide the armor bar.
+    // BO3: remove any armor the HUD would still show and hide the armor bar
+    // (armor is disabled by bo3_health.gsc; saved armor is not restored).
     self thread bo3_remove_armor_on_spawn();
 
     // rev. C: the stock starting 1911 is built from this player's own Zombie Build.
@@ -334,22 +354,6 @@ function private on_player_spawned( params )
     self thread legacy_pack_mule_watch();
 }
 
-function private clear_spawn_armor()
-{
-    self endon( #"disconnect" );
-    // Stock armor initialization can execute one or two frames after spawn.
-    wait 0.20;
-    if ( !self.fresh_armor_bought_this_life )
-    {
-        self force_armor_zero();
-    }
-    wait 0.50;
-    if ( !self.fresh_armor_bought_this_life )
-    {
-        self force_armor_zero();
-    }
-}
-
 function private force_armor_zero()
 {
     self.platecarrierlevel = 0;
@@ -360,7 +364,7 @@ function private force_armor_zero()
     self armor::external_setarmorplates( 0 );
 }
 
-// -------------------- ARMOR WALL-BUY --------------------
+// -------------------- ARMOR WALL-BUY (BO3: BLOCKED, SEE END) --------------------
 function private is_armor_wall( wall )
 {
     if ( !isdefined( wall ) )
@@ -408,104 +412,6 @@ function private bind_one_armor_wall()
 {
     self interaction::set_interact_use_callback( &bo3_armor_wall_use );
     self interaction::set_interact_hint_callback( &bo3_armor_wall_hint );
-}
-
-function private next_armor_tier( player )
-{
-    return minint( 4, ( player.platecarrierlevel ?? 0 ) + 1 );
-}
-
-function private armor_cost( tier )
-{
-    switch ( tier )
-    {
-        case 1: return 2500;
-        case 2: return 4000;
-        case 3: return 10000;
-        case 4: return 25000;
-    }
-    return 25000;
-}
-
-function private purchase_armor( player )
-{
-    if ( !supported_mode() || !isplayer( player ) )
-    {
-        return;
-    }
-    if ( player.hasgoldenarmorplate )
-    {
-        return;
-    }
-    tier = next_armor_tier( player );
-    cost = armor_cost( tier );
-    if ( tier == 4 && !utility::issharedfuncdefined( #"zombie", #"set_golden_armor" ) )
-    {
-        return;
-    }
-    if ( !player currency::attempt_purchase( #"essence", cost, 1, undefined, #"wallbuy" ) )
-    {
-        player playsoundtoplayer( #"ui_zm_core_purchase_deny", player );
-        return;
-    }
-    player.fresh_armor_bought_this_life = 1;
-    if ( tier == 4 )
-    {
-        player utility::callsharedfunc( #"zombie", #"set_golden_armor" );
-    }
-    else
-    {
-        player zm_armor::give_armor( tier );
-    }
-    params = spawnstruct();
-    params.cost = cost;
-    params.armor_level = tier;
-    params.currency = #"essence";
-    player callback::callback( "wallbuy_armor_purchased", params );
-    player playsoundtoplayer( #"ui_zm_core_purchase_success", player );
-}
-
-function private armor_hint( wall, player )
-{
-    if ( !supported_mode() || !isplayer( player ) )
-    {
-        return { #string:&"", #type:"HINT_NOBUTTON" };
-    }
-    tier = next_armor_tier( player );
-    cost = armor_cost( tier );
-    title = &"shared_hintstrings/armor_vest_lv1_pickup";
-    description = &"cp_zmb/armor1_desc";
-    switch ( tier )
-    {
-        case 2:
-            title = &"shared_hintstrings/wallbuy_armor_hint_level_ii";
-            description = &"cp_zmb/armor2_desc";
-            break;
-        case 3:
-            title = &"shared_hintstrings/wallbuy_armor_hint_level_iii";
-            description = &"cp_zmb/armor3_desc";
-            break;
-        case 4:
-            title = &"shared_hintstrings/wallbuy_armor_hint_gold";
-            if ( isdefined( level.var_c3cbabc25cac9c8e ) )
-            {
-                description = level.var_c3cbabc25cac9c8e.var_ecaed48dad41d0ff;
-            }
-            break;
-    }
-    hint = { #icon:"ui_icon_zm_ping_armor", #icon_text_value:cost, #icon_text:&"shared_hintstrings/cost_essence", #description:description, #title:title, #buttoncallout:&"shared_hintstrings/hint_buy", #params:[ cost, &"" ], #type:"HINT_BUTTON" };
-    hint.string = title;
-    if ( player.hasgoldenarmorplate )
-    {
-        hint.title = &"cp_zmb/armor_repair";
-        hint.interactable = 0;
-    }
-    else if ( player currency::get_currency_amount( #"essence" ) < cost )
-    {
-        hint.aux_text = &"shared_hintstrings/not_enough_essence";
-        hint.interactable = 0;
-    }
-    return hint;
 }
 
 // -------------------- MAP WONDER WEAPONS: AVAILABLE AT MATCH START --------------------
@@ -777,7 +683,7 @@ function private starting_1911_add_base_attachments( weaponobj )
 }
 
 // =====================================================================
-// NEW: ZOMBIE ATTACK DAMAGE - ROUNDS 1-10 USE THE ROUND-11 TIER
+// ZOMBIE ATTACK DAMAGE - CONSTANT ROUND-11 TIER (v3.35: every round)
 // =====================================================================
 // Verified in the BO7 dump:
 //  - damage_scaling_round::init_scaling_damage() registers
@@ -788,6 +694,12 @@ function private starting_1911_add_base_attachments( weaponobj )
 //    "damagescalinground:" bundle: melee / ranged / leap / armor-health /
 //    custom damage multipliers, all "startround -> damagemultiplier".
 //  - The common zombie tables are 1:x1.0, 11:x1.6666, 31:x2.5, ... (cap 250).
+//    (damagescalinground ingame_zm: melee 1/11/31/41/51/61/71/100/200/400,
+//    ranged 1/11/31/46). Rounds 11-30 share the x1.6666 tier.
+//  v3.35: normal zombies (aicategory "normal") get the round-11 tier at
+//    every round, so their attack damage never rises after round 30. Other
+//    AI categories keep the rev. B behaviour (round-11 tier in rounds 1-10,
+//    stock afterwards) so special / boss damage is not changed.
 //    Health uses a different sharedfunc, so this hook cannot touch health.
 // Approach: wrap the stock function and, for rounds 1-10 only, run it with
 // round 11. Every AI keeps ITS OWN table (so a type whose tier only changes
@@ -820,6 +732,19 @@ function private install_early_round_damage_tier()
 }
 
 // self = the AI being scaled (same calling convention as the stock function).
+// zombie_init_ai() assigns self.aicategory only AFTER the spawn-time damage
+// scaling call, so the AI's own settings bundle (self.zombieaisettings, set
+// first) is read when the field is not there yet.
+function private damage_tier_is_normal()
+{
+    category = self.aicategory;
+    if ( !isdefined( category ) && isdefined( self.zombieaisettings ) )
+    {
+        category = self.zombieaisettings.aicategory;
+    }
+    return category === "normal";
+}
+
 function private early_round_damage_tier( fixed_round_number )
 {
     orig = level.cursed_orig_damage_scaling;
@@ -828,14 +753,42 @@ function private early_round_damage_tier( fixed_round_number )
         return;
     }
 
-    if ( !supported_mode() || !isdefined( fixed_round_number ) || fixed_round_number < 1 || fixed_round_number >= 11 || zm_utility::get_round_number() >= 11 )
+    if ( !supported_mode() || !isdefined( fixed_round_number ) || fixed_round_number < 1 )
     {
         return self [[ orig ]]( fixed_round_number );
     }
 
+    // BO3: bo3_health.gsc disables round damage scaling (stock flag below;
+    // the stock function returns without changing anything) and fixes zombie
+    // melee at 50 via dvar. Damage is already constant: never re-scale it.
+    if ( istrue( level.var_9209eecc9aff21ad ) )
+    {
+        return self [[ orig ]]( fixed_round_number );
+    }
+
+    // Exfil and other scripted callers pass a low round on purpose while the
+    // live round is already 11+: keep their stock result.
+    if ( fixed_round_number < 11 && zm_utility::get_round_number() >= 11 )
+    {
+        return self [[ orig ]]( fixed_round_number );
+    }
+
+    // v3.35: from round 11 on only normal zombies are pinned; specials,
+    // elites, HVTs and bosses keep their own stock round scaling.
+    if ( fixed_round_number >= 11 && !damage_tier_is_normal() )
+    {
+        return self [[ orig ]]( fixed_round_number );
+    }
+
+    if ( fixed_round_number == 11 )
+    {
+        return self [[ orig ]]( 11 );
+    }
+
     // First pass at the real round, only to keep the max-simultaneous-target
-    // count (var_577dec43cf1caedf, a targeting value, not damage) unchanged.
-    // The stock function is idempotent (recomputes from *_base values).
+    // count (var_577dec43cf1caedf, a targeting value, not damage) and the
+    // stock late-round flag (var_f1cb4f6133640cfe) unchanged. The stock
+    // function is idempotent (recomputes from *_base values).
     self [[ orig ]]( fixed_round_number );
     max_targets = self.var_577dec43cf1caedf;
 
@@ -1047,6 +1000,162 @@ function private classic_1911_leg_damage( dmg_struct )
         dmg_struct.bskipexposedhead = 1;
     }
     return int( base * mult );
+}
+
+// =====================================================================
+// v3.34: CLASSIC BO1-BO3 STARTING KNIFE - WHITE KNIFE HITS-TO-KILL
+// =====================================================================
+// Verified in the BO7 dump:
+//  - Starting knife: "sat_me_knife_mp" (zm_rb_r_mod.gsc melee_override,
+//    pack_a_punch.gsc). Alternate-mode weapon objects are mapped back with
+//    the stock getnoaltweapon() (zombie_damage.gsc does the same), so the
+//    alternate attack is recognised whatever its weapon object is.
+//  - zombie_damage::function_23f0f83c55de1ad() runs, in order: level
+//    agent-damage callbacks (zombie_utils::register_zombie_agent_damage_
+//    callback on level), the zombie's own, the attacker's, then per-weapon
+//    callbacks. It runs AFTER every multiplier step (criticals, rarity / PaP,
+//    augments, and function_eb7d5e5b35444c8b = Melee Macchiato / Mocha Maul
+//    knife damage: a base zombie's full health up to round 20). No stock
+//    script registers a later callback for the knife or for zombie_base.
+//  - After the callbacks, function_960f65c8626d199b (exposed-head divide)
+//    skips MOD_MELEE / melee weapons; the armor steps only run when armor was
+//    damaged (armored zombies are left stock here). So the value returned
+//    here is the final damage for every hit location.
+//  - Insta-Kill (insta_kill.gsc) sets the zombie's kill_on_damage flag,
+//    which the pipeline applies after this callback: Insta-Kill still kills.
+//  - Spawn health: zombie_init.gsc sets maxhealth from the zombie's own
+//    health bundle at self._blackboard.difficultyround; in ZM that is
+//    zm_utility::get_round_number() at spawn (zm.gsc get_shared_round_number).
+//  - Points / kill credit: unchanged; only the damage number is returned.
+// Classic table (BO1-BO3 zombie health / 150 knife damage):
+//    hits = ceil( classic_health( round ) / 150 )
+//    rounds 1-15 exactly as listed: 1,2,3,3,4,5,5,6,7,7,8,9,10,11,12;
+//    round 16+ continues the classic health formula (x1.1 per round).
+// BO7 damage per hit = ceil( this zombie's maxhealth / hits ), using the
+// round the zombie spawned in (as in the classic games). N hits kill, N-1
+// do not, for every hit location and both attack inputs. Only White /
+// Common, non-Pack-a-Punched knife, MOD_MELEE, on unarmored normal zombies
+// (subclass "zombie_base", aicategory "normal"); everything else -> -1
+// (stock). Rarity / PaP are read on every hit, so an upgraded knife is
+// stock immediately.
+
+function private classic_knife_hits( n_round )
+{
+    if ( !isdefined( level.cursed_knife_hits ) )
+    {
+        level.cursed_knife_hits = [];
+    }
+    if ( isdefined( level.cursed_knife_hits[ n_round ] ) )
+    {
+        return level.cursed_knife_hits[ n_round ];
+    }
+
+    table = [ 150, 250, 350, 450, 550, 650, 750, 850, 950, 1045, 1150, 1265, 1391, 1530, 1683 ];
+    if ( n_round <= table.size )
+    {
+        hp = table[ n_round - 1 ];
+    }
+    else
+    {
+        hp = table[ table.size - 1 ];
+        last = min( n_round, 150 ); // classic growth; capped to stay in range
+        for ( r = table.size + 1; r <= last; r++ )
+        {
+            hp = int( hp * 1.1 );
+        }
+    }
+    hits = int( ceil( hp / 150 ) );
+    if ( hits < 1 )
+    {
+        hits = 1;
+    }
+    level.cursed_knife_hits[ n_round ] = hits;
+    return hits;
+}
+
+function private classic_knife_damage( dmg_struct )
+{
+    // self = the zombie being damaged.
+    if ( !supported_mode() )
+    {
+        return -1;
+    }
+    if ( !isdefined( dmg_struct.smeansofdeath ) || dmg_struct.smeansofdeath != "MOD_MELEE" )
+    {
+        return -1;
+    }
+    attacker = dmg_struct.eattacker;
+    if ( !isdefined( attacker ) || !isplayer( attacker ) )
+    {
+        return -1;
+    }
+    if ( !isdefined( self.subclass ) || self.subclass != "zombie_base" || !isdefined( self.aicategory ) || self.aicategory != "normal" )
+    {
+        return -1;
+    }
+    if ( isdefined( self.armorhealth ) && self.armorhealth > 0 )
+    {
+        return -1; // armored zombies keep stock damage / armor behaviour
+    }
+
+    w = dmg_struct.objweapon;
+    if ( !isdefined( w ) || !isweapon( w ) )
+    {
+        w = dmg_struct.sweapon;
+    }
+    if ( !isdefined( w ) || !isweapon( w ) )
+    {
+        return -1;
+    }
+    if ( w.isalternate )
+    {
+        w = w getnoaltweapon();
+    }
+    if ( w.basename != "sat_me_knife_mp" )
+    {
+        return -1;
+    }
+
+    // White / Common only (stock get_rarity(): undefined or 0 == "white").
+    if ( utility::issharedfuncdefined( #"zombie", #"getplayerweaponrarity" ) )
+    {
+        rarity = attacker utility::callsharedfunc( #"zombie", #"getplayerweaponrarity", w );
+        if ( isdefined( rarity ) && rarity != 0 )
+        {
+            return -1;
+        }
+    }
+    // Not Pack-a-Punched.
+    if ( attacker pack_a_punch::get_pap_level( w ) > 0 )
+    {
+        return -1;
+    }
+
+    if ( !isdefined( self.maxhealth ) || self.maxhealth < 1 )
+    {
+        return -1;
+    }
+    n_round = undefined;
+    if ( isdefined( self._blackboard ) && isdefined( self._blackboard.difficultyround ) )
+    {
+        n_round = self._blackboard.difficultyround;
+    }
+    if ( !isdefined( n_round ) || n_round < 1 )
+    {
+        n_round = zm_utility::get_round_number();
+    }
+    if ( !isdefined( n_round ) || n_round < 1 )
+    {
+        n_round = 1;
+    }
+
+    hits = classic_knife_hits( int( n_round ) );
+    damage = int( ceil( self.maxhealth / hits ) );
+    if ( damage < 1 )
+    {
+        damage = 1;
+    }
+    return damage;
 }
 
 // =====================================================================
@@ -1538,11 +1647,16 @@ function private arsenal_random_ammo_mod_hint( usable, player )
     return hint;
 }
 
-// ---------- 3. WALL-BUYS: PERMANENTLY GREEN ----------
+// ---------- 3. WALL-BUYS: PERMANENTLY GREEN + CLASSIC WHITE CHALK ----------
 // Verified in mp/wallbuy.gsc:
 //  - Weapon walls are level.contentmanager.spawnedinstances[ "wallbuy" ]
 //    [ i ].contentgroups[ "wallbuy_spawn" ][ j ].wallbuy_scriptable with
 //    .weapon_root_name (variant walls such as armor have none).
+//  - Every wall, content-manager or not, goes through
+//    Wallbuy::spawn_wallbuy_internal(), which appends its spawn struct to
+//    level.a_s_wallbuy_locations (Survival zones, Mantis boss arena and the
+//    wall randomizer modifier all spawn walls this way, outside the content
+//    manager instances).
 //  - Wallbuy::on_round_end() raises rarity every 5 rounds through
 //    update_wallbuy_rarity(), which returns early when
 //    wallbuy_scriptable.disable_upgrade is set.
@@ -1550,14 +1664,35 @@ function private arsenal_random_ammo_mod_hint( usable, player )
 //    "_green", and favourite-build rarity via rarity_to_number), so the
 //    bought weapon's real rarity matches the wall.
 // Set exactly what update_wallbuy_rarity() sets (rarity, cost from the
-// stock get_wallbuy_cost(), "wallbuy" part state), without its upgrade fx,
-// and set disable_upgrade so rounds and stock scripts cannot raise it.
+// stock get_wallbuy_cost()), without its upgrade fx, and set disable_upgrade
+// so rounds and stock scripts cannot raise it.
+//
+// v3.32 classic white chalk (visual only):
+//  - The chalk colour is NOT a GSC colour value. It is the "wallbuy" part
+//    state of the wall's scriptable asset; each state swaps the chalk
+//    material (assets: sat_zm_chalk_buy_<weapon> / mtl_t10_zm_chalk_buy_<weapon>
+//    for base, plus _uncommon / _rare / _epic / _legendary variants).
+//  - Wallbuy::set_wallbuy_rarity_state() maps white -> "base", green ->
+//    "green", blue, purple, orange; update_wallbuy_rarity() also maps
+//    "white" -> "base". So "base" exists on every weapon wall scriptable and
+//    is the white / Common chalk.
+//  - Stock precedent: zm_sat_hornet_assault_rounds on_feature_disabled() calls
+//    set_wallbuy_rarity_state( wall, "white" ) without touching .rarity -
+//    the part state is independent of the wall's real rarity.
+//  - Only the "wallbuy" part is set here; .rarity stays "green", so cost,
+//    hint and the purchased weapon are exactly the Green lock as before.
+//  - Hornet's on_feature_enabled() restores set_wallbuy_rarity_state( wall,
+//    wall.rarity ) and clears disable_upgrade; the sweep below sees the
+//    cleared flag and re-applies the lock + white chalk.
+//  - .cursed_white_chalk marks a scriptable that already got "base", so the
+//    part state is set once per scriptable (no repeated state changes).
 
 function private lock_wallbuys_green_init()
 {
     level endon( #"game_ended" );
     utility::flag_wait( "wallbuy_ready" );
     lock_wallbuys_green();
+    level thread white_chalk_sweep();
 }
 
 function private on_round_end_lock_wallbuys( params )
@@ -1568,33 +1703,79 @@ function private on_round_end_lock_wallbuys( params )
     }
 }
 
+// Light sweep (1 s, ~20-40 structs, no per-frame work): picks up walls that
+// spawn mid-round (Survival zones, boss arena, randomizer respawns) and
+// walls whose chalk a map script re-coloured (Hornet feature re-enable).
+function private white_chalk_sweep()
+{
+    level endon( #"game_ended" );
+    while ( true )
+    {
+        wait 1;
+        lock_wallbuys_green();
+    }
+}
+
 function private lock_wallbuys_green()
 {
-    if ( !isdefined( level.contentmanager ) || !isdefined( level.contentmanager.spawnedinstances[ "wallbuy" ] ) )
+    if ( isdefined( level.contentmanager ) && isdefined( level.contentmanager.spawnedinstances[ "wallbuy" ] ) )
     {
-        return;
-    }
-    foreach ( instance in level.contentmanager.spawnedinstances[ "wallbuy" ] )
-    {
-        if ( !isdefined( instance.contentgroups ) || !isdefined( instance.contentgroups[ "wallbuy_spawn" ] ) )
+        foreach ( instance in level.contentmanager.spawnedinstances[ "wallbuy" ] )
         {
-            continue;
-        }
-        foreach ( wallbuy_spawn in instance.contentgroups[ "wallbuy_spawn" ] )
-        {
-            ws = wallbuy_spawn.wallbuy_scriptable;
-            if ( !isdefined( ws ) || !isdefined( ws.weapon_root_name ) || is_armor_wall( ws ) )
+            if ( !isdefined( instance.contentgroups ) || !isdefined( instance.contentgroups[ "wallbuy_spawn" ] ) )
             {
                 continue;
             }
-            if ( !( ws.rarity === "green" ) )
+            foreach ( wallbuy_spawn in instance.contentgroups[ "wallbuy_spawn" ] )
             {
-                ws.rarity = "green";
-                ws.cost = Wallbuy::get_wallbuy_cost( ws.weapon_root_name, "green" );
-                ws setscriptablepartstate( "wallbuy", "green" );
+                lock_one_wallbuy( wallbuy_spawn.wallbuy_scriptable );
             }
-            ws.disable_upgrade = 1;
         }
+    }
+
+    // v3.32: walls spawned through spawn_wallbuy_internal() outside the
+    // content manager instances.
+    if ( isdefined( level.a_s_wallbuy_locations ) )
+    {
+        foreach ( s_wallbuy in level.a_s_wallbuy_locations )
+        {
+            if ( isdefined( s_wallbuy ) )
+            {
+                lock_one_wallbuy( s_wallbuy.wallbuy_scriptable );
+            }
+        }
+    }
+}
+
+function private lock_one_wallbuy( ws )
+{
+    // Weapon walls only: armor (variant) walls have no weapon_root_name and
+    // keep their own chalk / states.
+    if ( !isdefined( ws ) || !isdefined( ws.weapon_root_name ) || is_armor_wall( ws ) )
+    {
+        return;
+    }
+
+    // Real rarity + cost: unchanged Green lock.
+    if ( !isdefined( ws.rarity ) || ws.rarity != "green" )
+    {
+        ws.rarity = "green";
+        ws.cost = Wallbuy::get_wallbuy_cost( ws.weapon_root_name, "green" );
+    }
+
+    // disable_upgrade cleared by someone else (Hornet re-enable restores the
+    // rarity colour at the same time) -> chalk must be re-applied.
+    if ( !istrue( ws.disable_upgrade ) )
+    {
+        ws.cursed_white_chalk = undefined;
+    }
+    ws.disable_upgrade = 1;
+
+    // Visual only: white / Common chalk ("base" part state).
+    if ( !istrue( ws.cursed_white_chalk ) )
+    {
+        ws setscriptablepartstate( "wallbuy", "base" );
+        ws.cursed_white_chalk = 1;
     }
 }
 
@@ -1863,6 +2044,8 @@ function private classic_knife_restore()
 //  - Mocha Maul's stock knife damage applies (zombie_damage: a melee hit
 //    deals a base zombie's full health up to the perk bundle's
 //    maxdamageround, 20 by default).
+//    v3.34: for the White, non-PaP knife on unarmored normal zombies that
+//    value is replaced by the classic hits-to-kill damage (later stage).
 // Every other perk / augment question goes to the original function.
 function private classic_knife_install_augment_check()
 {
@@ -2046,13 +2229,142 @@ function private legacy_pack_mule_watch()
     }
 }
 
-// ---------- BO3-COMPATIBLE: NO VISIBLE ARMOR ----------
-// With armor disabled the stock starting armor (zm_armor::
-// zm_give_starting_armor via level.startingarmoroverridefunc) was still
-// given and drawn, but BO3 health ignores it - armor on screen, no
-// protection. Starting armor is now 0, any armor is cleared after spawn
-// (same calls as the main build's force_armor_zero) and the armor HUD is
-// hidden with the omnvar zm_save uses for no-armor games
+// =====================================================================
+// v3.35: MAP WONDER WEAPONS - ONE HIT ON NORMAL ZOMBIES (PaP III+)
+// =====================================================================
+// Verified in the BO7 dump:
+//  - Weapon names (scriptbundle scriptedweaponlist global_shared_mp and the
+//    weapon scripts):
+//      Ashes of the Damned  Necrofluid Gauntlet  sat_ww_firefly_zm
+//                           (EE "long" version sat_ww_firefly_ee_zm,
+//                           liquid grenade sat_ww_firefly_liquid_zm)
+//      Kowakujo             Nekomancer           sat_ww_hornet_zm
+//      Totenreich           Jotunn Star          sat_ww_locust_zm
+//                           (fireball sub-weapon sat_ww_locust_fireball)
+//      Paradox Junction     Blundergat           sat_ww_mantis_zm
+//      Astra Malorum        LGM-1                sat_ww_ruby_zm
+//      Rex Infernus         Warden's Blight      sat_ww_scarab_zm
+//    Not listed (unchanged): sat_ww_raygun_mp, sat_ww_raygunmark2_mp,
+//    sat_pi_ztronraygun.
+//  - Every damage path of these weapons (projectile hits, scripted
+//    dodamage() for AoE / DoT / recall / tornado / tendrils) carries the
+//    weapon object and runs through br_damage::zombie_agent_damage_callback.
+//    zombie_damage::function_23f0f83c55de1ad() calls the per-weapon map
+//    (register_zombie_weapon_damage_callback on level) LAST, after the
+//    weapons' own agent callbacks (VO, fx, penetration). No stock script
+//    registers a level per-weapon callback for these names.
+//  - Only the damage number is returned: effects, animations, ammo, PaP,
+//    kill credit and points stay stock; no extra damage event is created.
+//  - idamage <= 0 is left alone (Necrofluid returns 0 past its max enemy
+//    penetration on purpose). MOD_MELEE (weapon bash / gauntlet punch) stays
+//    stock. bskipexposedhead keeps the head-modifier divide from lowering
+//    the value. Normal zombies have no max-health damage cap (< 1).
+//  - Only normal, unarmored zombies: aicategory "normal", subclass without
+//    "armored", no armor health, no damage shield. Specials, elites, HVTs and
+//    bosses keep stock damage.
+//  - PaP level: pack_a_punch get_pap_level() matches the full weapon object,
+//    which sub-weapons (fireball, liquid grenade) never match, so the
+//    attacker's a_n_current_pap_level list is read by weapon family.
+// Threshold: level.cursed_ww_min_pap (3 = PaP III and IV; 0 = every tier).
+
+function private install_ww_instakill()
+{
+    level.cursed_ww_min_pap = 3;
+    level.cursed_ww_family = [];
+    level.cursed_ww_family[ "sat_ww_firefly_zm" ] = "sat_ww_firefly";
+    level.cursed_ww_family[ "sat_ww_firefly_ee_zm" ] = "sat_ww_firefly";
+    level.cursed_ww_family[ "sat_ww_firefly_liquid_zm" ] = "sat_ww_firefly";
+    level.cursed_ww_family[ "sat_ww_hornet_zm" ] = "sat_ww_hornet";
+    level.cursed_ww_family[ "sat_ww_locust_zm" ] = "sat_ww_locust";
+    level.cursed_ww_family[ "sat_ww_locust_fireball" ] = "sat_ww_locust";
+    level.cursed_ww_family[ "sat_ww_mantis_zm" ] = "sat_ww_mantis";
+    level.cursed_ww_family[ "sat_ww_ruby_zm" ] = "sat_ww_ruby";
+    level.cursed_ww_family[ "sat_ww_scarab_zm" ] = "sat_ww_scarab";
+
+    foreach ( weapon_name, family in level.cursed_ww_family )
+    {
+        level zombie_utils::register_zombie_weapon_damage_callback( weapon_name, &ww_instakill_damage );
+    }
+}
+
+function private ww_family_pap_level( player, family )
+{
+    best = 0;
+    if ( !isdefined( player.a_n_current_pap_level ) )
+    {
+        return best;
+    }
+    foreach ( papstruct in player.a_n_current_pap_level )
+    {
+        if ( !isdefined( papstruct ) || !isweapon( papstruct.weapon ) )
+        {
+            continue;
+        }
+        if ( issubstr( papstruct.weapon.basename, family ) && ( papstruct.n_level ?? 0 ) > best )
+        {
+            best = papstruct.n_level;
+        }
+    }
+    return best;
+}
+
+function private ww_instakill_damage( dmg_struct )
+{
+    // self = the zombie being damaged.
+    if ( !supported_mode() )
+    {
+        return -1;
+    }
+    if ( !isdefined( dmg_struct.idamage ) || dmg_struct.idamage <= 0 )
+    {
+        return -1;
+    }
+    if ( dmg_struct.smeansofdeath === "MOD_MELEE" )
+    {
+        return -1;
+    }
+    attacker = dmg_struct.eattacker;
+    if ( isdefined( attacker ) && !isplayer( attacker ) && isdefined( attacker.owner ) && isplayer( attacker.owner ) )
+    {
+        attacker = attacker.owner;
+    }
+    if ( !isdefined( attacker ) || !isplayer( attacker ) )
+    {
+        return -1;
+    }
+    if ( !( self.aicategory === "normal" ) || issubstr( self.subclass ?? "", "armored" ) || istrue( self.damageshield ) )
+    {
+        return -1;
+    }
+    if ( isdefined( self.armorhealth ) && self.armorhealth > 0 )
+    {
+        return -1;
+    }
+    if ( !isdefined( dmg_struct.sweapon ) || !isdefined( self.health ) )
+    {
+        return -1;
+    }
+    family = level.cursed_ww_family[ dmg_struct.sweapon.basename ];
+    if ( !isdefined( family ) )
+    {
+        return -1;
+    }
+    if ( ww_family_pap_level( attacker, family ) < level.cursed_ww_min_pap )
+    {
+        return -1;
+    }
+    dmg_struct.bskipexposedhead = 1;
+    return int( self.health ) + 1;
+}
+
+// =====================================================================
+// BO3-COMPATIBLE: NO VISIBLE ARMOR
+// =====================================================================
+// With armor disabled by bo3_health.gsc the stock starting armor (zm_armor::
+// zm_give_starting_armor via level.startingarmoroverridefunc) would still be
+// given and drawn while giving no protection. Starting armor is 0 (saved
+// loads included), any armor is cleared after spawn with force_armor_zero()
+// and the armor HUD is hidden with the omnvar zm_save uses for no-armor games
 // ("ui_show_armor_global" = 0).
 function private bo3_no_starting_armor( player )
 {
@@ -2071,13 +2383,14 @@ function private bo3_remove_armor_on_spawn()
     self setclientomnvar( "ui_show_armor_global", 0 );
 }
 
-// ---------- BO3-COMPATIBLE: ARMOR WALL-BUYS BLOCKED ----------
-// bo3_health.gsc disables armor, but the stock armor wall-buy (variant
-// "armor", incl. wallbuy_zm_t10_armor_legendary = golden armor) kept its own
-// purchase. The walls are bound exactly like the main build binds them
+// =====================================================================
+// BO3-COMPATIBLE: ARMOR WALL-BUYS BLOCKED
+// =====================================================================
+// The stock armor wall-buy (variant "armor", incl. wallbuy_zm_t10_armor_
+// legendary = golden armor) keeps its own purchase even with armor off.
+// The walls are bound exactly like the standard build binds them
 // (Wallbuy::register_wallbuy_variant_spawn + set_interact_use/hint_callback),
-// but to a purchase that does nothing and a hidden prompt (the stock
-// "HINT_NOICON" return used for unusable interacts).
+// to a purchase that does nothing (no charge) and a hidden prompt.
 function private bo3_armor_wall_use( player )
 {
     return;
