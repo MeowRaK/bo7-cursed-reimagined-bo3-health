@@ -1,3 +1,4 @@
+![Cursed Reimagined Preview](preview.png)
 # BO7 Zombies | Cursed Reimagined – BO3 Health Compatible
 
 A compatibility edition of Cursed Reimagined v3.28 designed to run alongside the standalone BO3 Health mod on Kronos.
