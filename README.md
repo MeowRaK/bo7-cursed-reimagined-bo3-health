@@ -24,4 +24,4 @@ All other supported Cursed Reimagined gameplay features remain in the compatible
 ## Credits
 
 - **MeowRaK** — Cursed Reimagined development and BO3 Health compatibility adjustments.
-- **BO3 Health** — Original standalone mod by its respective creator, distributed separately and not included in this release.
+- **BO3 Health** — Original standalone mod created by **grum_sudo** (Discord: `@grum_sudo` | GitHub: [grum-sudo](https://github.com/grum-sudo)). Distributed separately and not included in this release.
