@@ -23,10 +23,17 @@
 //  - Everything else (PaP + rarity, box, wall-buys + white chalk, Arsenal,
 //    1911 / knife builds, classic 1911 + knife damage, GobbleGums, Field
 //    Upgrades, Pack Mule, map Wonder Weapons) is identical to the standard.
+// Update (v3.46-bo3c): ~ Synced with standard v3.44 / v3.45 / v3.46:
+//                    Mystery Box map Wonder Weapon has the same chance as the
+//                    Ray Gun (map's own box Wonder Weapon list, 1/3 each with
+//                    Ray Gun and Ray Gun Mk 2); extra forced roll hook present
+//                    but off (level.cursed_box_ww_chance = 0); 4 copies of the
+//                    map Wonder Weapon on every map (level.cursed_box_ww_copies).
 // Update (v3.39-bo3c): + Synced with standard v3.38 / v3.39 / v3.41 (zombie-side
 //                    and rewards only; bo3_health.gsc untouched):
 //                    T.E.D.D. task chests: Aether Tool slots -> tier Aether Crystal;
-//                    Ray Gun / Ray Gun Mark II damage x2 at every PaP tier;
+//                    Ray Gun / Ray Gun Mark II damage x2 at PaP I-III, x2.5 at
+//                    PaP IV (Mark II headshots at PaP IV: x2.5 x1.35);
 //                    map Wonder Weapons at PaP IV: damage x1.7 on every non-boss
 //                    enemy not already one-hit (specials, elites, HVTs).
 //                  - Standard v3.40 (armor damage stock from round 31) NOT
@@ -222,9 +229,23 @@ function init()
 
     // NEW: strip the 3 GobbleGums stock pre-loads at connect (see section below).
     level callback::add( #"player_connect", &on_player_connect_gobblegums );
+    level callback::add( #"player_spawned", &on_player_connect_gobblegums );
+    if ( isdefined( level.players ) )
+    {
+        foreach ( player in level.players )
+        {
+            player thread clear_starting_gobblegums(); // already connected before init
+        }
+    }
 
     level thread maintain_pap_and_starting_armor();
     level thread bind_armor_walls();
+    // v3.44: % chance per box use to roll the map's own Wonder Weapon.
+    // v3.46: 0 = off; the map Wonder Weapon is in the box's own Wonder
+    // Weapon list instead, with the same chance as the Ray Gun.
+    level.cursed_box_ww_chance = 0;
+    // v3.45: max copies of the map's Wonder Weapon (ground + held).
+    level.cursed_box_ww_copies = 4;
     level thread unlock_map_wonder_weapons();
 
     // NEW: early-round zombie attack damage tier (see section below).
@@ -455,6 +476,60 @@ function private unlock_map_wonder_weapons()
     // ensure_map_wonder_list(); it is put in place before the loop starts.
     ensure_map_wonder_list();
     level thread unlock_map_wonder_loop();
+
+    // v3.44: explicit map Wonder Weapon roll (see box_force_map_wonder).
+    level callback::add( "magicbox_used", &box_force_map_wonder );
+}
+
+// v3.44: the map's own Wonder Weapon is put in the box roll directly.
+// Stock hook (magicbox.gsc on_use_magicbox): player callback "magicbox_used"
+// with params.s_magicbox runs right before the roll. setup_magicbox_weapon_array()
+// takes s_magicbox.var_aef038a20b4915b3 as a forced item ("itemspawnentry:" +
+// name), marks it rolled_wonder / ultra, and still re-rolls from the normal
+// list when the item limit is reached or the player already has it.
+// Kowakujo's Maneki-neko easter egg uses the same field.
+function private box_map_wonder_item()
+{
+    switch ( level.mapname )
+    {
+        case "zm_sat_firefly":
+            return "zm_sat_item_weapon_ww_firefly";
+        case "zm_sat_hornet":
+            return "zm_sat_item_weapon_ww_hornet";
+        case "zm_sat_locust":
+            return "zm_sat_item_weapon_ww_locust";
+        case "zm_sat_mantis":
+            return "zm_sat_item_weapon_ww_mantis";
+        case "zm_sat_ruby":
+            return "zm_sat_item_weapon_ww_ruby";
+        case "zm_sat_scarab":
+            return "zm_sat_item_weapon_ww_scarab";
+    }
+    return undefined;
+}
+
+function private box_force_map_wonder( params )
+{
+    if ( !supported_mode() || !isdefined( params ) || !isdefined( params.s_magicbox ) )
+    {
+        return;
+    }
+    item = box_map_wonder_item();
+    if ( !isdefined( item ) || randomfloat( 100 ) >= level.cursed_box_ww_chance )
+    {
+        return;
+    }
+    params.s_magicbox.var_aef038a20b4915b3 = item;
+    params.s_magicbox thread box_clear_forced_wonder();
+}
+
+function private box_clear_forced_wonder()
+{
+    waitframe();
+    if ( isdefined( self ) )
+    {
+        self.var_aef038a20b4915b3 = undefined;
+    }
 }
 
 // v3.24: Cursed uses the box bundle "magicbox_sat_zm_r_mod"
@@ -469,41 +544,37 @@ function private unlock_map_wonder_weapons()
 // (same as the stock code that builds it). Equal weight with the Mk 2.
 function private ensure_map_wonder_list()
 {
-    bundle = getscriptbundle( "magicbox:magicbox_sat_zm" );
-    if ( !isdefined( bundle ) || !isdefined( bundle.magicboxmapwonderweapons ) )
+    // v3.46: use the map's own box Wonder Weapon list directly. The dump has
+    // one per map (itemspawnlist zm_sat_<map>_items_magicbox_weapon_wonder_list:
+    // Ray Gun 1, Ray Gun Mk 2 1, map Wonder Weapon 1), but the Cursed box
+    // bundle only points to the Ashes / Astra ones, so on the other maps the
+    // box used the Ray Gun + Mk 2 list only. Same field / item table the stock
+    // setup_magicbox_weapons() fills; the map Wonder Weapon now has exactly
+    // the Ray Gun's chance in every mode.
+    if ( !isdefined( box_map_wonder_item() ) )
     {
         return;
     }
-    map_list = undefined;
-    foreach ( wonderweaponliststruct in bundle.magicboxmapwonderweapons )
+    map_list = level.mapname + "_items_magicbox_weapon_wonder_list";
+    list_bundle = getscriptbundle( hashcat( %"itemspawnlist:", map_list ) );
+    if ( !isdefined( list_bundle ) || !isarray( list_bundle.itementries ) )
     {
-        if ( isdefined( wonderweaponliststruct.wonderweaponlist ) && wonderweaponliststruct.mapname == getxhash( level.mapname ) )
-        {
-            map_list = wonderweaponliststruct.wonderweaponlist;
-            break;
-        }
-    }
-    if ( !isdefined( map_list ) || level.var_8b6bf63f61fe01f9 === map_list )
-    {
-        return; // map has no Wonder Weapon list, or it is already in use
+        logstring( "[BO7 Cursed Fresh] Map Wonder Weapon list not found: " + map_list );
+        return;
     }
     level.var_8b6bf63f61fe01f9 = map_list;
-    list_bundle = getscriptbundle( map_list );
-    if ( isdefined( list_bundle ) && isarray( list_bundle.itementries ) )
+    if ( !isdefined( level.var_c5111f0d24e5789a ) )
     {
-        if ( !isdefined( level.var_c5111f0d24e5789a ) )
+        level.var_c5111f0d24e5789a = [];
+    }
+    foreach ( s_itementry in list_bundle.itementries )
+    {
+        if ( isdefined( s_itementry.itemspawnentry ) )
         {
-            level.var_c5111f0d24e5789a = [];
-        }
-        foreach ( s_itementry in list_bundle.itementries )
-        {
-            if ( isdefined( s_itementry.itemspawnentry ) )
-            {
-                level.var_c5111f0d24e5789a = arraycombineunique( level.var_c5111f0d24e5789a, [ s_itementry.itemspawnentry ] );
-            }
+            level.var_c5111f0d24e5789a = arraycombineunique( level.var_c5111f0d24e5789a, [ s_itementry.itemspawnentry ] );
         }
     }
-    logstring( "[BO7 Cursed Fresh] Map Wonder Weapon list added to the Mystery Box" );
+    logstring( "[BO7 Cursed Fresh] Map Wonder Weapon list in the Mystery Box: " + map_list );
 }
 
 function private set_map_wonder_limit( item_name, limit )
@@ -512,8 +583,15 @@ function private set_map_wonder_limit( item_name, limit )
     {
         return;
     }
-    if ( isdefined( level.a_magicbox_item_limits[ item_name ] ) &&
-         level.a_magicbox_item_limits[ item_name ].itemmax < limit )
+    // v3.45: create the limit when the box bundle has none (stock
+    // on_scriptable_item_spawned() then tracks the spawned copies), and set
+    // it to exactly this value.
+    if ( !isdefined( level.a_magicbox_item_limits[ item_name ] ) )
+    {
+        level.a_magicbox_item_limits[ item_name ] = { #itemmax:limit, #spawneditems:[] };
+        return;
+    }
+    if ( level.a_magicbox_item_limits[ item_name ].itemmax != limit )
     {
         level.a_magicbox_item_limits[ item_name ].itemmax = limit;
     }
@@ -540,23 +618,12 @@ function private unlock_map_wonder_loop()
 
         // These quest rewards have item limits raised only at quest completion.
         // Set the limit to the same completed-quest level from round 1.
-        switch ( level.mapname )
+        // v3.45: every map Wonder Weapon: 4 copies (box limit counts the
+        // ones on the ground + the ones players hold).
+        item = box_map_wonder_item();
+        if ( isdefined( item ) )
         {
-            case "zm_sat_firefly":
-                set_map_wonder_limit( %"itemspawnentry:zm_sat_item_weapon_ww_firefly", 4 );
-                break;
-            case "zm_sat_hornet":
-                set_map_wonder_limit( %"itemspawnentry:zm_sat_item_weapon_ww_hornet", 4 );
-                break;
-            case "zm_sat_locust":
-                set_map_wonder_limit( %"itemspawnentry:zm_sat_item_weapon_ww_locust", 3 );
-                break;
-            case "zm_sat_scarab":
-                set_map_wonder_limit( %"itemspawnentry:zm_sat_item_weapon_ww_scarab", 1 );
-                break;
-            case "zm_sat_ruby":
-                set_map_wonder_limit( %"itemspawnentry:zm_sat_item_weapon_ww_ruby", 1 );
-                break;
+            set_map_wonder_limit( hashcat( %"itemspawnentry:", item ), level.cursed_box_ww_copies );
         }
 
         // Regenerate the roulette's cached map-weapon models after clearing
@@ -870,10 +937,16 @@ function private clear_starting_gobblegums()
     {
         return; // GobbleGums disabled for this match.
     }
-    if ( istrue( self.cursed_starting_gums_cleared ) )
+    if ( istrue( self.cursed_starting_gums_cleared ) || istrue( self.cursed_starting_gums_pending ) )
     {
         return;
     }
+    self.cursed_starting_gums_pending = 1;
+
+    // Clear only once the round logic starts: every pre-load / pack refill
+    // has happened by then, and no gum can be earned yet.
+    level utility::flag_wait( "begin_round_logic" );
+    waitframe();
     self.cursed_starting_gums_cleared = 1;
 
     // Same saved-loadout checks stock uses; restored gums are legitimate.
@@ -1114,6 +1187,12 @@ function private classic_knife_damage( dmg_struct )
     }
     attacker = dmg_struct.eattacker;
     if ( !isdefined( attacker ) || !isplayer( attacker ) )
+    {
+        return -1;
+    }
+    // FIX: Melee Macchiato owners keep stock perk/augment knife damage.
+    // Zombie perks live in self.a_perks: engine hasperk() is always false.
+    if ( utility::issharedfuncdefined( #"zombie_perks", #"has_zombie_perk" ) && attacker utility::callsharedfunc( #"zombie_perks", #"has_zombie_perk", "specialty_m_mod" ) )
     {
         return -1;
     }
@@ -2427,7 +2506,7 @@ function private ww_killondamage_restore()
 }
 
 // =====================================================================
-// v3.39: RAY GUN / RAY GUN MARK II - DOUBLE DAMAGE AT EVERY PaP TIER
+// v3.39: RAY GUN / RAY GUN MARK II - x2 AT PaP I-III, x2.5 AT PaP IV
 // =====================================================================
 // Verified in the BO7 dump:
 //  - br_damage zombie_agent_damage_callback order: adjustdamagerarity
@@ -2482,7 +2561,22 @@ function private raygun_pap_double_damage( dmg_struct )
     {
         return -1;
     }
-    return int( dmg_struct.idamage * 2 );
+    mult = 2.0;
+    // PaP IV only: impact + splash x2.5, Mark II headshot +35%.
+    if ( n_pap >= 4 )
+    {
+        mult = 2.5;
+        mod = dmg_struct.smeansofdeath;
+        if ( dmg_struct.sweapon.basename == "sat_ww_raygunmark2_mp" )
+        {
+            loc = dmg_struct.shitloc;
+            if ( mod === "MOD_HEAD_SHOT" || loc === "head" || loc === "neck" || loc === "helmet" )
+            {
+                mult = 2.5 * 1.35;
+            }
+        }
+    }
+    return int( dmg_struct.idamage * mult );
 }
 
 // ---------- v3.38: T.E.D.D. TASK REWARDS WITHOUT AETHER TOOLS ----------
