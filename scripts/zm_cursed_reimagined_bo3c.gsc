@@ -1,170 +1,45 @@
-// BO7 Zombies (Kronos) - Fresh Cursed Rules, independent standalone GSC.
-// Three supported gametypes only: Cursed, Cursed Survival, Mister Peeks Mayhem.
-// No legacy progression, rarity, Arsenal, wall-weapon, or HUD modifications.
-// BO3 HEALTH COMPATIBLE EDITION - requires bo3_health.gsc.
-// SOURCE BUILD: not compiled or runtime tested; verify in an offline game.
+// BO7 Zombies (Kronos) - Cursed Reimagined, BO3 health edition.
+// Load together with bo3_health.gsc (that file is not modified).
+// Active only in Cursed (zm_rb_r_mod), Cursed Survival (zm_rb_r_mod_survival)
+// and Mister Peeks Mayhem (zm_rb_rh_mod); every other mode is left stock.
+// Source build: not compiled or runtime tested; verify in an offline game.
 //
-// ===== BO3-COMPATIBLE EDITION (v3.35, load together with bo3_health.gsc) =====
-// Same gameplay as the standard v3.35 build except where bo3_health.gsc owns
-// the system (bo3_health.gsc itself is not modified):
-//  - Player health / Juggernog / zombie melee damage: bo3_health.gsc. It sets
-//    level.var_9209eecc9aff21ad (stock flag: no round damage scaling at all,
-//    damage_scaling_round returns early) and dvar zombie_melee_damage_override
-//    50, so zombie melee damage is already flat for every round. The v3.35
-//    constant-tier hook is installed but steps aside while that flag is set
-//    (no double scaling, BO3 values kept); it only takes over if this file
-//    is ever loaded without bo3_health.gsc.
-//  - Armor: none. bo3_health.gsc forces level.allowarmor 0 and the no-armor
-//    modifier ON every 0.05 s. This file no longer writes zmmodenoarmor
-//    (the standard build sets it to 0 every 0.1 s = constant tug-of-war),
-//    gives 0 starting armor (also on saved-round loads), clears armor after
-//    spawn, hides the armor HUD, and binds armor wall-buys (incl. golden
-//    armor) to a blocked purchase with a hidden prompt.
-//  - Everything else (PaP + rarity, box, wall-buys + white chalk, Arsenal,
-//    1911 / knife builds, classic 1911 + knife damage, GobbleGums, Field
-//    Upgrades, Pack Mule, map Wonder Weapons) is identical to the standard.
-// Update (v3.46-bo3c): ~ Synced with standard v3.44 / v3.45 / v3.46:
-//                    Mystery Box map Wonder Weapon has the same chance as the
-//                    Ray Gun (map's own box Wonder Weapon list, 1/3 each with
-//                    Ray Gun and Ray Gun Mk 2); extra forced roll hook present
-//                    but off (level.cursed_box_ww_chance = 0); 4 copies of the
-//                    map Wonder Weapon on every map (level.cursed_box_ww_copies).
-// Update (v3.39-bo3c): + Synced with standard v3.38 / v3.39 / v3.41 (zombie-side
-//                    and rewards only; bo3_health.gsc untouched):
-//                    T.E.D.D. task chests: Aether Tool slots -> tier Aether Crystal;
-//                    Ray Gun / Ray Gun Mark II damage x2 at PaP I-III, x2.5 at
-//                    PaP IV (Mark II headshots at PaP IV: x2.5 x1.35);
-//                    map Wonder Weapons at PaP IV: damage x1.7 on every non-boss
-//                    enemy not already one-hit (specials, elites, HVTs).
-//                  - Standard v3.40 (armor damage stock from round 31) NOT
-//                    included: bo3_health.gsc turns round damage scaling and
-//                    armor off.
-// Update (v3.37-bo3c): + PaP III+ map Wonder Weapon one-hit kill extended to
-//                    armored zombies (zombie_base_armored_light / _heavy /
-//                    _heavy_no_armor) through the stock killondamage flag,
-//                    same as standard v3.37. Zombie-side only: bo3_health.gsc
-//                    (player health / armor) untouched.
-//                  + Death Perception "Sixth Sense": orange edge-glow indicator
-//                    (and its warning sound) removed; less damage from behind
-//                    kept (synced with standard v3.36)
-// Update (v3.35-bo3c): + Synced with standard v3.32-v3.35 (classic knife
-//                    hits-to-kill, white wall-buy chalk + wider wall lock,
-//                    stock Mister Peeks chance, constant damage tier, map
-//                    Wonder Weapon one-hit at PaP III+)
-//                  - v3.29 Mister Peeks 5% override dropped (standard v3.33)
-//                  ~ Armor: dead armor-purchase code removed; bo3 armor path kept
-// Update (v3.35):  + Zombie attack damage constant for the whole match: normal
-//                    zombies always use the stock round-11 tier (the tier of
-//                    rounds 11-30; stock round 31 starts the next tier), from
-//                    round 1 to any round. Specials / elites / bosses: rounds
-//                    1-10 use their round-11 tier (rev. B), stock from round 11.
-//                    Zombie health, speed, spawning untouched.
-//                  + Map Wonder Weapons at Pack-a-Punch III+ kill normal
-//                    (unarmored) zombies in one damaging hit at any round:
-//                    Necrofluid Gauntlet, Nekomancer, Jotunn Star, Blundergat,
-//                    LGM-1, Warden's Blight. Ray Gun / Ray Gun Mk 2 unchanged.
-// Update (rev. B): + Rounds 1-10 use the stock round-11 zombie attack damage tier
-//                  + Players start with 0 GobbleGums loaded (was 3)
-// Update (rev. C): - Removed forced 1911 "The Classic" blueprint swap
-//                  + Starting 1911 uses each player's own saved Zombie Build
-// Update (rev. D): + White, non-PaP 1911 damage on normal zombies uses fixed
-//                    classic BO1 values by hit location (8 leg shots survive,
-//                    knife finishes; chest x1.25, abdomen x1.1, head x3.5)
-// Update (v3.32):  + Classic white wall-buy chalk: every weapon wall-buy shows the
-//                    scriptable's "base" (white / Common) chalk state; the wall's
-//                    real rarity (Green lock), cost and purchases are unchanged.
-//                    Armor walls and the Mystery Box are not touched.
-//                  ~ Wall lock now also covers walls spawned outside the content
-//                    manager (level.a_s_wallbuy_locations: Survival, boss arena,
-//                    modifier respawns) and walls re-coloured by Hornet's
-//                    assault-round feature toggle (1 s light sweep, no per-frame)
-// Update (v3.3):   - Arsenal: pressing Use can briefly put a non-gun (use gesture /
-//                    hands) in getcurrentweapon(); the target is now the held
-//                    primary (getcurrentprimaryweapon fallback)
-// Update (v3.34):  + Classic BO1-BO3 starting knife: White, non-PaP knife on normal
-//                    zombies follows the classic hits-to-kill table (150 dmg vs
-//                    classic round health), same for every hit location and for
-//                    primary / alternate attack; replaces the Mocha Maul
-//                    one-hit only for that knife
-// Update (v3.33):  - Mister Peeks spawn/egg chance override removed completely
-//                    (stock Mister Peeks behaviour)
-// Update (v3.28):  - FIX: save & quit -> continue no longer removes armor (saved
-//                    armor restored by the stock function on saved-round loads)
-// Update (v3.27):  ~ Legacy Pack Mule: legacy weapons also recognised from the
-//                    box's own "islegacyweapon" purchase flag; refill test uses
-//                    weaponstartammo / weaponmaxammo directly (>= normal max)
-// Update (v3.26):  + Legacy (Ultra) box weapons always get Pack Mule ammo, without
-//                    Mule Kick; other Mule Kick augments unaffected
-// Update (v3.25):  + Box weapon knocked out with melee keeps the Zombie Build
-// Update (v3.24):  + Box: the map's Wonder Weapon list (Ray Gun, Mk 2, map Wonder
-//                    Weapon) is taken from magicbox_sat_zm when the Cursed box
-//                    bundle has none, so the map Wonder Weapon is in the box
-//                    from round 1 without its quest
-// Update (v3.23):  ~ Field Upgrades: fixed 40-kill charge, no increase per use
-//                    (TEDD task charge overrides still work)
-// Update (v3.22):  + Classic knife built in: the stock "perk + augment" check
-//                    (shared func #"zombie" hash_3930894d8d2f0ee6) answers yes
-//                    for Melee Macchiato + Mocha Maul for every player, so all
-//                    stock Mocha Maul code runs without the perk
-//                  - Watcher simplified (no forced perk re-apply)
-// Update (v3.21):  - FIX: melee-slot change test used ===, which never matched, so
-//                    the perk was toggled every 0.5 s and the knife never worked
-// Update (v3.20):  ~ Classic knife watcher survives downs; perk re-applied after a
-//                    revive and when the melee-slot knife changes
-// Update (v3.19):  ~ Classic knife without Melee Macchiato: perk re-applied by a
-//                    1 s check (it was being cleared after the spawn grant)
-// Update (v3.18):  - Classic PaP for Cursed / Cursed Survival removed again
-//                  + Classic knife: Mocha Maul as a bonus augment (extra slot)
-//                    and the knife on the melee button even without Melee
-//                    Macchiato (specialty_melee_without_swap)
-// Update (v3.17):  + Classic Pack-a-Punch re-enabled in Cursed / Cursed Survival,
-//                    with an on-screen reminder to collect the weapon (stock
-//                    10-second pickup window of the classic path)
-// Update (v3.16):  - Classic PaP for Cursed / Cursed Survival reverted (weapon was
-//                    lost after the animation in those modes)
-//                  ~ Arsenal prompt/Lua text/purchase: one fixed range (56 units)
-// Update (v3.15):  - FIX: item_spawn_allowed veto was inverted (blocked all items
-//                    incl. Mystery Box weapons, allowed only Aether Tools)
-//                  + Classic Pack-a-Punch in Cursed / Cursed Survival
-//                  ~ Arsenal prompt text: perk-remove prompt pattern (250 ms)
-// Update (v3.14):  + Box: legacy weapons back (stock Ultra rarity, Mister Peeks
-//                    Mayhem scaling only, as in the original game)
-//                  - Aether Tools (rarity upgrade tools) removed from every
-//                    source: item spawns vetoed via "item_spawn_allowed",
-//                    Chompy store tool list emptied
-// Update (v3.13):  ~ Arsenal prompt range reduction 1.8 m in total (70.9 units)
-// Update (v3.12):  ~ Arsenal prompt range reduction 0.8 m -> 1 m (39.4 units)
-// Update (v3.11):  ~ Arsenal prompt range reduced by 0.8 m (31.5 units)
-// Update (v3.10):  - Arsenal: fallback weapon restored (hint-seen primary, then
-//                    self.lastweaponobj), used as-is so Wonder Weapons stay refused
-//                  - Prompt text cleared as soon as the prompt's hint calls stop
-// Update (v3.9):   ~ Arsenal label: dvar "cursed_arsenal_prompt" holds the text
-//                    while the local player is at a machine ("" otherwise),
-//                    drawn by zm_cursed_arsenal_prompt_post.lua (same design as
-//                    zm_perk_remove_post.lua). Localize hook dropped.
-//                  - Arsenal acts only on the weapon in hand; Wonder Weapons
-//                    (iswonderweapon / ismapwonderweapon / sat_ww_*) refused,
-//                    no other gun is modified and nothing is charged
-// Update (v3.8):   ~ dvar "cursed_arsenal_hint" is now 1 for the whole match in
-//                    the supported modes (0 elsewhere); the Lua retitles the
-//                    Arsenal prompt itself. Proximity watcher removed.
-// Update (v3.6):   - Arsenal: the gun is lowered while using the machine, so the
-//                    weapon seen by the hint / self.lastweaponobj is used
-// Update (v3.5):   - Arsenal: pool falls back to the registered level.ammo_mods
-//                    table; refusal message names the exact failing check
-// Update (v3.4):   - Removed "self getlastweapon()": it is a script function
-//                    (inventory::getlastweapon), not an engine method, and
-//                    broke the script
-// Update (v3.2):   - PaP rarity: also synced after the item-based PaP pickup
-//                    ("zm_packed_weapon_non_augment") and on weapon change
-//                  - Arsenal: on-screen reason when a purchase is refused
-// Update (v3.1):   - No calls into the arsenal namespace (both failing paths used it)
-//                  - Rarity get/set through the stock shared functions
-// Update (v3):     + PaP tier sets rarity (I blue, II purple, III legendary, IV ultra)
-//                  + Arsenal: random Ammo Mod for 250 Salvage (no rarity upgrades)
-//                  + Weapon wall-buys locked to green
-//                  + Mystery Box: green regular weapons only, no Aether Tools
-//                  + Starting knife uses each player's own saved Zombie Build
+// bo3_health.gsc owns these systems, so this file steps aside:
+//  - Player health, Jugger-Nog and zombie melee damage. bo3_health.gsc sets
+//    level.var_9209eecc9aff21ad (stock flag: no round damage scaling) and
+//    zombie_melee_damage_override 50. The attack-damage tier hook stays
+//    installed but does nothing while that flag is set; it only applies if
+//    this file is loaded without bo3_health.gsc.
+//  - Armor: disabled. bo3_health.gsc forces level.allowarmor 0 and the
+//    no-armor modifier on every 0.05 s, so this file never writes
+//    zmmodenoarmor (no tug-of-war). It gives 0 starting armor (saved loads
+//    included), clears armor after spawn, hides the armor HUD and blocks
+//    armor wall-buys (golden armor included).
+//  - Zombie speed: bo3_health.gsc caps every zombie at "run" in all rounds,
+//    boss fights included, and turns Rampage Inducer off. This file has no
+//    speed code of its own.
+//
+// What this file changes (each feature has its own section below):
+//  - Pack-a-Punch: max level IV; the PaP level sets the weapon's rarity
+//    (I blue, II purple, III legendary, IV ultra).
+//  - Starting loadout: the 1911 and the knife use each player's saved
+//    Zombie Build; no GobbleGums are pre-loaded.
+//  - Classic damage: White 1911 uses BO1 hit-location damage; White knife
+//    uses BO1-BO3 hits-to-kill; Mocha Maul classic knife for every player.
+//  - Arsenal: random Ammo Mod for 250 Salvage (no rarity upgrades).
+//  - Wall-buys: locked to Green, shown with classic white chalk.
+//  - Mystery Box: regular weapons are Green; the map Wonder Weapon is in the
+//    box from round 1 (level.cursed_box_ww_copies copies); in Mister Peeks
+//    Mayhem the Ray Gun / Mk 2 chance is reduced (level.cursed_peeks_raygun_keep).
+//  - Aether Tools removed everywhere (T.E.D.D. chests give the tier's Aether
+//    Crystal instead). Field Upgrades always cost 40 kills.
+//  - Wonder Weapons: map Wonder Weapons one-hit normal and armored zombies
+//    at PaP III+ and deal x1.7 to other non-boss enemies at PaP IV; LGM-1
+//    PaP IV saucer strike; Ray Gun / Mk 2 x2 (PaP I-III) and x2.5 (PaP IV).
+//  - Legacy (Ultra) box weapons get Pack Mule ammo; box weapons dropped by
+//    a melee keep the Zombie Build; Death Perception has no orange indicator.
+//
+// Tunables are the level.cursed_* values set in init() and in each section.
 
 // script_aa3bac81ad4fc8e = stock GobbleGum core (#namespace bgb), referenced
 // by this exact hashed name in stock scripts\mp\zm\points.gsc.
@@ -212,8 +87,8 @@ function private supported_mode()
 
 function init()
 {
-    // v3.9: text for zm_cursed_arsenal_prompt_post.lua; "" = hidden. Reset
-    // first so no mode inherits a value from a previous match.
+    // Arsenal prompt text read by zm_cursed_arsenal_prompt_post.lua ("" = hidden).
+    // Reset first so no mode inherits a value from a previous match.
     setdvar( "cursed_arsenal_prompt", "" );
     if ( !supported_mode() )
     {
@@ -227,7 +102,7 @@ function init()
     // The fallback applies only when the menu identifies the level4 item.
     lui_game_event_aggregator::registeronluieventcallback( &pap_four_fallback, "pap_weaponupgrade_purchase" );
 
-    // NEW: strip the 3 GobbleGums stock pre-loads at connect (see section below).
+    // Clear the 3 GobbleGums stock pre-loads at connect (see GOBBLEGUMS section).
     level callback::add( #"player_connect", &on_player_connect_gobblegums );
     level callback::add( #"player_spawned", &on_player_connect_gobblegums );
     if ( isdefined( level.players ) )
@@ -240,36 +115,38 @@ function init()
 
     level thread maintain_pap_and_starting_armor();
     level thread bind_armor_walls();
-    // v3.44: % chance per box use to roll the map's own Wonder Weapon.
-    // v3.46: 0 = off; the map Wonder Weapon is in the box's own Wonder
-    // Weapon list instead, with the same chance as the Ray Gun.
+    // Extra % chance per box use to force the map's own Wonder Weapon.
+    // 0 = off: the map Wonder Weapon is already in the box's Wonder Weapon
+    // list with the same chance as the Ray Gun.
     level.cursed_box_ww_chance = 0;
-    // v3.45: max copies of the map's Wonder Weapon (ground + held).
+    // Max copies of the map's Wonder Weapon (on the ground + held).
     level.cursed_box_ww_copies = 4;
     level thread unlock_map_wonder_weapons();
 
-    // NEW: early-round zombie attack damage tier (see section below).
+    // Zombie attack damage tier hook (see ZOMBIE ATTACK DAMAGE section).
     level thread install_early_round_damage_tier();
 
-    // v3.35: map Wonder Weapons one-hit normal zombies at PaP III+ (see section).
+    // Map Wonder Weapons one-hit normal zombies at PaP III+ (see section).
     install_ww_instakill();
 
-    // v3.39: Ray Gun / Mark II double damage at PaP I-IV (see section).
+    // Ray Gun / Mark II: x2 damage at PaP I-III, x2.5 at PaP IV (see section).
     install_raygun_pap_double();
+    // LGM-1 PaP IV saucer strike (see section).
+    install_lgm_strike();
 
-    // v3.36: Death Perception "Sixth Sense" - no orange edge glow (see section).
+    // Death Perception "Sixth Sense" - no orange edge glow (see section).
     callback::add( "zm_perk_obtained", &sixth_sense_no_glow );
 
-    // rev. C: starting 1911 uses the player's own Zombie Build (see section below).
+    // Starting 1911 uses the player's own Zombie Build (see section below).
     level thread install_starting_1911_build_hook();
 
-    // rev. D: classic BO1 white-1911 damage by hit location (see section at the end).
+    // Classic BO1 white-1911 damage by hit location (see section at the end).
     level zombie_utils::register_zombie_weapon_damage_callback( "sat_pi_alcor_mp", &classic_1911_leg_damage );
 
-    // v3.34: classic BO1-BO3 starting knife hits-to-kill (see section after rev. D).
+    // Classic BO1-BO3 starting knife hits-to-kill (see section after the classic 1911).
     level zombie_utils::register_zombie_agent_damage_callback( &classic_knife_damage );
 
-    // v3: weapon progression overhaul (see section at the end).
+    // Weapon progression: PaP rarity, Arsenal, wall-buys, Mystery Box (see section).
     level callback::add( "zm_packed_weapon", &on_packed_weapon_rarity );
     level callback::add( "zm_packed_weapon_non_augment", &on_packed_weapon_rarity );
     level callback::add( #"player_weapon_change", &on_weapon_change_rarity );
@@ -283,7 +160,7 @@ function init()
     level thread legacy_pack_mule_init();
     level callback::add( "magicbox_purchase", &legacy_pack_mule_on_box_purchase );
     level callback::add( #"item_spawn_allowed", &veto_aether_tool_spawn );
-    // v3.38: T.E.D.D. task chests: Aether Tool slots -> tier Aether Crystal.
+    // T.E.D.D. task chests: Aether Tool slots -> tier Aether Crystal.
     level callback::add( "teddtask_complete", &tedd_rewards_no_tools );
     level callback::add( #"item_spawn_begin", &keep_build_on_box_drop );
 
@@ -356,14 +233,14 @@ function private maintain_pap_and_starting_armor()
         level.max_pack_a_punch_level = 4;
         // BO3: no starting armor at all, including saved-round loads.
         level.startingarmoroverridefunc = &bo3_no_starting_armor;
-        // v3: stock Arsenal rarity upgrades refuse (no charge) at max 0;
+        // Stock Arsenal rarity upgrades refuse (no charge) at max 0;
         // stock relic setup otherwise sets 4 or 5.
         level.arsenal_max_weapon_rarity = 0;
-        // v3.14: zm_store_chompy offers an Aether Tool only when this table
+        // Zm_store_chompy offers an Aether Tool only when this table
         // has an entry for the next rarity (can_player_use_type); empty =
         // the store picks another item instead (no wasted purchase).
         level.var_a90df52f7134ce0 = [];
-        // v3.23: Field Upgrades always need 40 kills.
+        // Field Upgrades always need 40 kills.
         // field_upgrades::function_547d8d27c323ad0() (the points-needed func
         // ZM puts on every Field Upgrade) returns level.var_750a1cea39c9abc8
         // when it is a number, else bundle pointsNeeded + player.superincreasecost.
@@ -393,13 +270,13 @@ function private on_player_spawned( params )
     // (armor is disabled by bo3_health.gsc; saved armor is not restored).
     self thread bo3_remove_armor_on_spawn();
 
-    // rev. C: the stock starting 1911 is built from this player's own Zombie Build.
+    // The stock starting 1911 is built from this player's own Zombie Build.
     self arm_starting_1911_build();
 
-    // v3.18: classic knife (Mocha Maul) - see section at the end.
+    // Classic knife (Mocha Maul) - see section at the end.
     self thread classic_knife_on_spawn();
 
-    // v3.26: Pack Mule ammo on legacy (Ultra) box weapons - see section at the end.
+    // Pack Mule ammo on legacy (Ultra) box weapons - see section at the end.
     self thread legacy_pack_mule_watch();
 }
 
@@ -413,7 +290,7 @@ function private force_armor_zero()
     self armor::external_setarmorplates( 0 );
 }
 
-// -------------------- ARMOR WALL-BUY (BO3: BLOCKED, SEE END) --------------------
+// -------------------- ARMOR WALL-BUY (BLOCKED, SEE BO3-COMPATIBLE SECTION) --------------------
 function private is_armor_wall( wall )
 {
     if ( !isdefined( wall ) )
@@ -472,16 +349,17 @@ function private unlock_map_wonder_weapons()
 
     // Five map quests in this dump explicitly call function_2e49...(1)
     // to remove their map Wonder Weapon from the box until the quest ends.
-    // v3.24: the map's own Wonder Weapon list is NOT always selected - see
-    // ensure_map_wonder_list(); it is put in place before the loop starts.
+    // The box bundle does not always select the map's own Wonder Weapon list;
+    // ensure_map_wonder_list() puts it in place before the loop starts.
     ensure_map_wonder_list();
     level thread unlock_map_wonder_loop();
 
-    // v3.44: explicit map Wonder Weapon roll (see box_force_map_wonder).
+    // Optional forced map Wonder Weapon roll (see box_force_map_wonder).
     level callback::add( "magicbox_used", &box_force_map_wonder );
+    level callback::add( "magicbox_used", &box_half_rayguns_peeks ); // Mister Peeks Mayhem Ray Gun reduction
 }
 
-// v3.44: the map's own Wonder Weapon is put in the box roll directly.
+// Forces the map's own Wonder Weapon into a box roll (level.cursed_box_ww_chance).
 // Stock hook (magicbox.gsc on_use_magicbox): player callback "magicbox_used"
 // with params.s_magicbox runs right before the roll. setup_magicbox_weapon_array()
 // takes s_magicbox.var_aef038a20b4915b3 as a forced item ("itemspawnentry:" +
@@ -532,25 +410,18 @@ function private box_clear_forced_wonder()
     }
 }
 
-// v3.24: Cursed uses the box bundle "magicbox_sat_zm_r_mod"
-// (gametypebundle zm_rb_r_mod: magicboxbundle). Only some ZM box bundles
-// carry magicboxmapwonderweapons (map -> list of Ray Gun, Ray Gun Mk 2 and
-// that map's Wonder Weapon); a bundle without it leaves
-// level.var_8b6bf63f61fe01f9 on the generic wonder list, so the map's Wonder
-// Weapon never enters the box. magicbox_sat_zm (gamemode default) has the
-// table for every map, so the list is taken from there with the exact stock
-// lookup (magicbox.gsc: mapname == getxhash( level.mapname )), and its entries
-// are added to level.var_c5111f0d24e5789a, the box's Wonder Weapon item table
-// (same as the stock code that builds it). Equal weight with the Mk 2.
+// Box Wonder Weapon list. The Cursed box bundle (magicbox_sat_zm_r_mod) has
+// no per-map Wonder Weapon table for most maps, which leaves
+// level.var_8b6bf63f61fe01f9 on the generic list (Ray Gun + Mk 2 only), so
+// the map's Wonder Weapon would never enter the box.
 function private ensure_map_wonder_list()
 {
-    // v3.46: use the map's own box Wonder Weapon list directly. The dump has
-    // one per map (itemspawnlist zm_sat_<map>_items_magicbox_weapon_wonder_list:
-    // Ray Gun 1, Ray Gun Mk 2 1, map Wonder Weapon 1), but the Cursed box
-    // bundle only points to the Ashes / Astra ones, so on the other maps the
-    // box used the Ray Gun + Mk 2 list only. Same field / item table the stock
-    // setup_magicbox_weapons() fills; the map Wonder Weapon now has exactly
-    // the Ray Gun's chance in every mode.
+    // Use the map's own box Wonder Weapon list. The dump has one per map
+    // (itemspawnlist zm_sat_<map>_items_magicbox_weapon_wonder_list: Ray Gun 1,
+    // Ray Gun Mk 2 1, map Wonder Weapon 1). Its entries go into
+    // level.var_c5111f0d24e5789a, the same item table the stock
+    // setup_magicbox_weapons() fills, so the map Wonder Weapon has exactly the
+    // Ray Gun's chance on every map and mode.
     if ( !isdefined( box_map_wonder_item() ) )
     {
         return;
@@ -583,7 +454,7 @@ function private set_map_wonder_limit( item_name, limit )
     {
         return;
     }
-    // v3.45: create the limit when the box bundle has none (stock
+    // Create the limit when the box bundle has none (stock
     // on_scriptable_item_spawned() then tracks the spawned copies), and set
     // it to exactly this value.
     if ( !isdefined( level.a_magicbox_item_limits[ item_name ] ) )
@@ -618,8 +489,8 @@ function private unlock_map_wonder_loop()
 
         // These quest rewards have item limits raised only at quest completion.
         // Set the limit to the same completed-quest level from round 1.
-        // v3.45: every map Wonder Weapon: 4 copies (box limit counts the
-        // ones on the ground + the ones players hold).
+        // Every map Wonder Weapon: level.cursed_box_ww_copies copies (the box limit
+        // counts the ones on the ground + the ones players hold).
         item = box_map_wonder_item();
         if ( isdefined( item ) )
         {
@@ -638,7 +509,7 @@ function private unlock_map_wonder_loop()
 }
 
 // =====================================================================
-// STARTING WEAPON - PLAYER'S OWN SAVED 1911 ZOMBIE BUILD (rev. C)
+// STARTING WEAPON - PLAYER'S OWN SAVED 1911 ZOMBIE BUILD
 // =====================================================================
 // Verified in the BO7 dump:
 //  - zm_rb_r_mod::post_main() (all three supported gametypes) calls
@@ -720,7 +591,7 @@ function private arm_starting_1911_build()
         return;
     }
     self.cursed_1911_build_pending = 1;
-    self.cursed_knife_build_pending = 1; // v3: starting knife (melee_override)
+    self.cursed_knife_build_pending = 1; // starting knife (melee_override)
     self thread expire_starting_1911_build();
 }
 
@@ -753,7 +624,7 @@ function private starting_1911_add_base_attachments( weaponobj )
         // No saved Zombie Build: fall through to the stock default 1911.
     }
 
-    // v3: zm_rb_r_mod::post_main() sets melee_override "sat_me_knife_mp"; the
+    // Zm_rb_r_mod::post_main() sets melee_override "sat_me_knife_mp"; the
     // stock hand-out builds it with makeweaponwithdefaults() (this hook), then
     // giveweapon() + weapon::updatetertiaryweapon(). sat_me_knife_mp is an
     // eligible melee entry in zm_sat_weapons_list, so the player's saved build
@@ -778,7 +649,7 @@ function private starting_1911_add_base_attachments( weaponobj )
 }
 
 // =====================================================================
-// ZOMBIE ATTACK DAMAGE - CONSTANT ROUND-11 TIER (v3.35: every round)
+// ZOMBIE ATTACK DAMAGE - CONSTANT ROUND-11 TIER
 // =====================================================================
 // Verified in the BO7 dump:
 //  - damage_scaling_round::init_scaling_damage() registers
@@ -791,10 +662,10 @@ function private starting_1911_add_base_attachments( weaponobj )
 //  - The common zombie tables are 1:x1.0, 11:x1.6666, 31:x2.5, ... (cap 250).
 //    (damagescalinground ingame_zm: melee 1/11/31/41/51/61/71/100/200/400,
 //    ranged 1/11/31/46). Rounds 11-30 share the x1.6666 tier.
-//  v3.35: normal zombies (aicategory "normal") get the round-11 tier at
-//    every round, so their attack damage never rises after round 30. Other
-//    AI categories keep the rev. B behaviour (round-11 tier in rounds 1-10,
-//    stock afterwards) so special / boss damage is not changed.
+//  Normal zombies (aicategory "normal") get the round-11 tier at every
+//    round, so their attack damage never rises after round 30. Other AI
+//    categories get the round-11 tier in rounds 1-10 and stock afterwards,
+//    so special / boss damage is not changed.
 //    Health uses a different sharedfunc, so this hook cannot touch health.
 // Approach: wrap the stock function and, for rounds 1-10 only, run it with
 // round 11. Every AI keeps ITS OWN table (so a type whose tier only changes
@@ -868,7 +739,7 @@ function private early_round_damage_tier( fixed_round_number )
         return self [[ orig ]]( fixed_round_number );
     }
 
-    // v3.35: from round 11 on only normal zombies are pinned; specials,
+    // From round 11 on only normal zombies are pinned; specials,
     // elites, HVTs and bosses keep their own stock round scaling.
     if ( fixed_round_number >= 11 && !damage_tier_is_normal() )
     {
@@ -893,7 +764,7 @@ function private early_round_damage_tier( fixed_round_number )
 }
 
 // =====================================================================
-// NEW: START WITH 0 GOBBLEGUMS (WAS 3)
+// START WITH 0 GOBBLEGUMS LOADED (STOCK PRE-LOADS 3)
 // =====================================================================
 // Verified in the BO7 dump (script_aa3bac81ad4fc8e, #namespace bgb):
 //  - bgb::on_player_connect() -> bgb_player_init() builds the player's
@@ -972,7 +843,7 @@ function private clear_starting_gobblegums()
 }
 
 // =====================================================================
-// rev. D: CLASSIC BO1 M1911 - WHITE 1911 DAMAGE BY HIT LOCATION
+// CLASSIC BO1 M1911 - WHITE 1911 DAMAGE BY HIT LOCATION
 // =====================================================================
 // Verified in the BO7 dump:
 //  - zm_damage::zombie_agent_damage_callback() (and br_damage's copy) run the
@@ -1104,7 +975,7 @@ function private classic_1911_leg_damage( dmg_struct )
 }
 
 // =====================================================================
-// v3.34: CLASSIC BO1-BO3 STARTING KNIFE - WHITE KNIFE HITS-TO-KILL
+// CLASSIC BO1-BO3 STARTING KNIFE - WHITE KNIFE HITS-TO-KILL
 // =====================================================================
 // Verified in the BO7 dump:
 //  - Starting knife: "sat_me_knife_mp" (zm_rb_r_mod.gsc melee_override,
@@ -1190,7 +1061,7 @@ function private classic_knife_damage( dmg_struct )
     {
         return -1;
     }
-    // FIX: Melee Macchiato owners keep stock perk/augment knife damage.
+    // Melee Macchiato owners keep stock perk/augment knife damage.
     // Zombie perks live in self.a_perks: engine hasperk() is always false.
     if ( utility::issharedfuncdefined( #"zombie_perks", #"has_zombie_perk" ) && attacker utility::callsharedfunc( #"zombie_perks", #"has_zombie_perk", "specialty_m_mod" ) )
     {
@@ -1266,7 +1137,7 @@ function private classic_knife_damage( dmg_struct )
 }
 
 // =====================================================================
-// v3: WEAPON PROGRESSION OVERHAUL
+// WEAPON PROGRESSION OVERHAUL
 // =====================================================================
 
 // ---------- 1. PACK-A-PUNCH LEVEL -> RARITY ----------
@@ -1422,7 +1293,7 @@ function private pap_level_rarity( w, pap_level )
 //  - The Arsenal menu content comes from purchase-menu bundles that script
 //    cannot edit, so the machine's interaction is rebound instead (same
 //    interaction API this mod already uses for armor walls). The menu - and
-//    with it manual rarity upgrades - is no longer opened.
+//    with it manual rarity upgrades - is never opened.
 //  - level.arsenal_max_weapon_rarity = 0 additionally makes the stock
 //    craft_weapon_tier() refuse (response 4, no charge) if the menu is
 //    ever opened by any other path.
@@ -1774,7 +1645,7 @@ function private arsenal_random_ammo_mod_hint( usable, player )
 // stock get_wallbuy_cost()), without its upgrade fx, and set disable_upgrade
 // so rounds and stock scripts cannot raise it.
 //
-// v3.32 classic white chalk (visual only):
+// Classic white chalk (visual only):
 //  - The chalk colour is NOT a GSC colour value. It is the "wallbuy" part
 //    state of the wall's scriptable asset; each state swaps the chalk
 //    material (assets: sat_zm_chalk_buy_<weapon> / mtl_t10_zm_chalk_buy_<weapon>
@@ -1787,7 +1658,7 @@ function private arsenal_random_ammo_mod_hint( usable, player )
 //    set_wallbuy_rarity_state( wall, "white" ) without touching .rarity -
 //    the part state is independent of the wall's real rarity.
 //  - Only the "wallbuy" part is set here; .rarity stays "green", so cost,
-//    hint and the purchased weapon are exactly the Green lock as before.
+//    hint and the purchased weapon are exactly the Green lock.
 //  - Hornet's on_feature_enabled() restores set_wallbuy_rarity_state( wall,
 //    wall.rarity ) and clears disable_upgrade; the sweep below sees the
 //    cleared flag and re-applies the lock + white chalk.
@@ -1840,7 +1711,7 @@ function private lock_wallbuys_green()
         }
     }
 
-    // v3.32: walls spawned through spawn_wallbuy_internal() outside the
+    // Walls spawned through spawn_wallbuy_internal() outside the
     // content manager instances.
     if ( isdefined( level.a_s_wallbuy_locations ) )
     {
@@ -1899,7 +1770,7 @@ function private lock_one_wallbuy( ws )
 //  - Legacy weapons (legacyweaponchance of the active scaling bundle; the
 //    map can override the bundle, so this applies in all three modes) are in
 //    level.var_d46bd3e7f2f3e08e and take the item's own Ultra rarity branch,
-//    not the regular-weapon rarity checks - left exactly as stock (v3.14).
+//    not the regular-weapon rarity checks - left exactly as stock.
 //  - The roulette preview rolls percent_chance() on the same three values.
 // Applied once to every round entry: rare/epic 0, legendary -100 (all three
 // checks end above 100, so every regular weapon - rolled, re-rolled and
@@ -1925,7 +1796,7 @@ function private lock_magicbox_green()
     }
 }
 
-// ---------- v3.9: ARSENAL PROMPT TEXT FOR LUA ----------
+// ---------- ARSENAL PROMPT TEXT FOR LUA ----------
 // zm_cursed_arsenal_prompt_post.lua shows dvar cursed_arsenal_prompt inside
 // the Arsenal prompt (same pattern as zm_perk_remove_post.lua: GSC setdvar()
 // -> Lua Dvar.GetDvarString()). The dvar is global, so the local (first)
@@ -1966,23 +1837,21 @@ function private arsenal_prompt_label_watch( player )
     level.cursed_arsenal_prompt_watch = 0;
 }
 
-// ---------- v3.16: ARSENAL PROMPT RANGE (FIXED DISTANCE) ----------
-// The engine starts calling the hint callback from well outside the distance
-// at which the prompt can actually be used, so the "furthest hint call"
-// measurement of v3.11-v3.15 was too large: the Lua text appeared far away.
-// Now one fixed distance decides everything: inside it the prompt, the Lua
-// text and the purchase are active; outside it the prompt is hidden (stock
-// "HINT_NOICON" return) and Use does nothing. Measured flat (distance2d)
-// from the player to the Arsenal interact point (25 units in front of the
-// machine, init_arsenal_machine). 1 unit = 1 inch; 56 units = 1.4 m.
-// Change ARSENAL_RANGE below to tune it.
+// ---------- ARSENAL PROMPT RANGE (FIXED DISTANCE) ----------
+// The engine calls the hint callback from well outside the distance at
+// which the prompt can be used, so one fixed distance decides everything:
+// inside it the prompt, the Lua text and the purchase are active; outside
+// it the prompt is hidden (stock "HINT_NOICON" return) and Use does
+// nothing. Measured flat (distance2d) from the player to the Arsenal
+// interact point (25 units in front of the machine, init_arsenal_machine).
+// 1 unit = 1 inch; 56 units = 1.4 m. Change ARSENAL_RANGE below to tune it.
 function private arsenal_in_reduced_range( player )
 {
     arsenal_range = 56; // ARSENAL_RANGE
     return distance2d( player.origin, self.origin ) <= arsenal_range;
 }
 
-// ---------- v3.14: REMOVE AETHER TOOLS (RARITY UPGRADE TOOLS) ----------
+// ---------- REMOVE AETHER TOOLS (RARITY UPGRADE TOOLS) ----------
 // Verified in mp/loot/common_item.gsc: every world item spawn (Mystery Box
 // weapons, reward bundles of trials, Mister Peeks eggs, side Easter eggs,
 // vault, drops, ...) passes through
@@ -1990,8 +1859,7 @@ function private arsenal_in_reduced_range( player )
 // common/callbacks.gsc _evaluate_response(): with type 1 the spawn is
 // cancelled as soon as ANY handler returns false (0). So this handler must
 // return true for every item and false only for Aether Tools.
-// (v3.14 had this inverted, which blocked every item except Aether Tools,
-// including the Mystery Box weapon.) The four tool tiers are
+// The four tool tiers are
 // itemspawnentry zm_t10_item_aether_tool(_2/_3/_4) with refs t10_aethertool,
 // t10_aethertool2/3/4. Aether Crystals (PaP items) are NOT affected.
 function private veto_aether_tool_spawn( params )
@@ -2008,7 +1876,7 @@ function private veto_aether_tool_spawn( params )
     return true; // everything else: allowed
 }
 
-// ---------- v3.18: CLASSIC KNIFE (MELEE MACCHIATO - MOCHA MAUL) ----------
+// ---------- CLASSIC KNIFE (MELEE MACCHIATO - MOCHA MAUL) ----------
 // Verified in the BO7 dump:
 //  - Mocha Maul is augment #"m_mod_panic_knife" ("The punch is replaced with
 //    your Dedicated Melee Weapon"). perk_m_mod.gsc / m_mod_augments.gsc give
@@ -2038,10 +1906,10 @@ function private classic_knife_on_spawn()
     self classic_knife_give_bonus_augment();
     self classic_knife_update( self getcurrentweapon() );
 
-    // v3.22: the perk is given back whenever it is missing (also after a
-    // down). No forced remove/re-give any more (v3.20/v3.21 did that and
-    // broke the knife). The stock Mocha Maul weapon-change handler now also
-    // runs for every player (see classic_knife_augment_check below).
+    // The perk is given back whenever it is missing (also after a down); it
+    // is never force-removed and re-given, which would break the knife. The
+    // stock Mocha Maul weapon-change handler also runs for every player
+    // (see classic_knife_augment_check below).
     while ( supported_mode() )
     {
         wait 0.5;
@@ -2137,7 +2005,7 @@ function private classic_knife_restore()
     self classic_knife_update( self getcurrentweapon() );
 }
 
-// ---------- v3.22: MOCHA MAUL WITHOUT MELEE MACCHIATO ----------
+// ---------- MOCHA MAUL WITHOUT MELEE MACCHIATO ----------
 // Same technique as zm_armor_health_rework.gsc (Vulture Aid "replate"
 // without the perk): wrap the stock shared function
 //   #"zombie" / #"hash_3930894d8d2f0ee6" ( perkname, augmentname )
@@ -2151,7 +2019,7 @@ function private classic_knife_restore()
 //  - Mocha Maul's stock knife damage applies (zombie_damage: a melee hit
 //    deals a base zombie's full health up to the perk bundle's
 //    maxdamageround, 20 by default).
-//    v3.34: for the White, non-PaP knife on unarmored normal zombies that
+//    For the White, non-PaP knife on unarmored normal zombies that
 //    value is replaced by the classic hits-to-kill damage (later stage).
 // Every other perk / augment question goes to the original function.
 function private classic_knife_install_augment_check()
@@ -2179,7 +2047,7 @@ function private classic_knife_augment_check( perkname, augmentname )
     return self [[ level.cursed_classic_knife_orig_check ]]( perkname, augmentname );
 }
 
-// ---------- v3.25: ZOMBIE BUILD KEPT ON MELEE-SHARED BOX WEAPONS ----------
+// ---------- ZOMBIE BUILD KEPT ON MELEE-SHARED BOX WEAPONS ----------
 // Verified in mp/magicbox.gsc: meleeing the weapon in an open box runs
 // drop_item_from_magicbox(), which spawns the dropped weapon with
 // spawnoptions from function_535a73eae8edf8b7() (spawningentity = the
@@ -2223,7 +2091,7 @@ function private keep_build_on_box_drop( params )
     }
 }
 
-// ---------- v3.26: PACK MULE FOR LEGACY (ULTRA) WEAPONS ----------
+// ---------- PACK MULE FOR LEGACY (ULTRA) WEAPONS ----------
 // Verified in the BO7 dump:
 //  - Pack Mule (#"z_mod_pack_mule") changes ONE value: every refill /
 //    pickup / ammo purchase asks utility::get_max_stock_ammo( weapon,
@@ -2264,7 +2132,7 @@ function private legacy_pack_mule_init()
 // reserve went UP and landed exactly on the normal maximum - the value every
 // stock refill sets without Pack Mule. Shooting / reloading only lower the
 // reserve, so this can never refill ammo by itself.
-// v3.27: Mystery Box pickups fire callback "magicbox_purchase" (self =
+// Mystery Box pickups fire callback "magicbox_purchase" (self =
 // player) with params.islegacyweapon (the box's var_c472ba9c1811f8cf flag)
 // and params.objweapon. That flag is the authoritative "legacy weapon" mark,
 // so the weapon is remembered for this player.
@@ -2337,7 +2205,7 @@ function private legacy_pack_mule_watch()
 }
 
 // =====================================================================
-// v3.35: MAP WONDER WEAPONS - ONE HIT ON NORMAL ZOMBIES (PaP III+)
+// MAP WONDER WEAPONS - ONE HIT ON NORMAL ZOMBIES (PaP III+)
 // =====================================================================
 // Verified in the BO7 dump:
 //  - Weapon names (scriptbundle scriptedweaponlist global_shared_mp and the
@@ -2377,7 +2245,7 @@ function private legacy_pack_mule_watch()
 function private install_ww_instakill()
 {
     level.cursed_ww_min_pap = 3;
-    // v3.39: PaP tier that doubles damage on non-boss enemies not one-hit.
+    // PaP tier at which non-boss enemies that are not one-hit take x1.7 damage.
     level.cursed_ww_double_pap = 4;
     level.cursed_ww_family = [];
     level.cursed_ww_family[ "sat_ww_firefly_zm" ] = "sat_ww_firefly";
@@ -2395,7 +2263,7 @@ function private install_ww_instakill()
         level zombie_utils::register_zombie_weapon_damage_callback( weapon_name, &ww_instakill_damage );
     }
 
-    // v3.37: armored zombies (scriptbundle/ai_subclass), killed through the
+    // Armored zombies (scriptbundle/ai_subclass), killed through the
     // stock killondamage flag.
     level.cursed_ww_armored_subclass = [];
     level.cursed_ww_armored_subclass[ "zombie_base_armored_light" ] = 1;
@@ -2463,9 +2331,14 @@ function private ww_instakill_damage( dmg_struct )
         return -1;
     }
     n_pap = ww_family_pap_level( attacker, family );
-    // v3.37: armored zombies (never HVT / boss variants).
+    // LGM-1 PaP IV - first saucer hit of a shot starts the strike.
+    if ( family == "sat_ww_ruby" && n_pap >= 4 )
+    {
+        self lgm_strike_check( attacker, dmg_struct.sweapon );
+    }
+    // Armored zombies (never HVT / boss variants).
     is_armored = isdefined( self.subclass ) && isdefined( level.cursed_ww_armored_subclass[ self.subclass ] ) && !( self.aicategory === "boss" ) && !( self.aicategory === "hvt" );
-    // v3.35 rule unchanged: normal, unarmored zombies.
+    // Normal, unarmored zombies.
     is_plain_normal = self.aicategory === "normal" && !issubstr( self.subclass ?? "", "armored" ) && !( isdefined( self.armorhealth ) && self.armorhealth > 0 );
     if ( ( is_armored || is_plain_normal ) && n_pap >= level.cursed_ww_min_pap )
     {
@@ -2485,7 +2358,7 @@ function private ww_instakill_damage( dmg_struct )
         }
         return int( self.health ) + 1;
     }
-    // v3.41: PaP IV multiplies the damage by 1.7 on every other enemy
+    // PaP IV multiplies the damage by 1.7 on every other enemy
     // (specials, elites, HVTs, normal zombies the rule above skips).
     // Bosses keep stock damage.
     if ( n_pap >= level.cursed_ww_double_pap && !( self.aicategory === "boss" ) )
@@ -2506,7 +2379,7 @@ function private ww_killondamage_restore()
 }
 
 // =====================================================================
-// v3.39: RAY GUN / RAY GUN MARK II - x2 AT PaP I-III, x2.5 AT PaP IV
+// RAY GUN / RAY GUN MARK II - x2 AT PaP I-III, x2.5 AT PaP IV
 // =====================================================================
 // Verified in the BO7 dump:
 //  - br_damage zombie_agent_damage_callback order: adjustdamagerarity
@@ -2579,7 +2452,7 @@ function private raygun_pap_double_damage( dmg_struct )
     return int( dmg_struct.idamage * mult );
 }
 
-// ---------- v3.38: T.E.D.D. TASK REWARDS WITHOUT AETHER TOOLS ----------
+// ---------- T.E.D.D. TASK REWARDS WITHOUT AETHER TOOLS ----------
 // Verified in the BO7 dump (mp/zm/tedd_tasks.gsc, mp/zm/sat_interactable_chest.gsc,
 // mp/loot/common_cache.gsc, itemspawnlist bundles):
 //  - teddtasks::end_task() grades the task (loot_level 1 / 2 / 3), takes the
@@ -2753,7 +2626,7 @@ function private bo3_remove_armor_on_spawn()
 // =====================================================================
 // The stock armor wall-buy (variant "armor", incl. wallbuy_zm_t10_armor_
 // legendary = golden armor) keeps its own purchase even with armor off.
-// The walls are bound exactly like the standard build binds them
+// The walls are bound the same way as armor walls normally are
 // (Wallbuy::register_wallbuy_variant_spawn + set_interact_use/hint_callback),
 // to a purchase that does nothing (no charge) and a hidden prompt.
 function private bo3_armor_wall_use( player )
@@ -2767,7 +2640,7 @@ function private bo3_armor_wall_hint( wall, player )
 }
 
 // =====================================================================
-// v3.36: DEATH PERCEPTION "SIXTH SENSE" - NO ORANGE INDICATOR
+// DEATH PERCEPTION "SIXTH SENSE" - NO ORANGE INDICATOR
 // =====================================================================
 // Verified in the BO7 dump (deathperception_augments.gsc, zm_player_damage.gsc):
 //  - The indicator is watch_behind_thread(): a per-frame zombie scan started
@@ -2799,4 +2672,165 @@ function private sixth_sense_no_glow( params )
     self.var_12c1ab119730f01b = 0;
     self setclientomnvar( "ui_edge_glow", 0 );
     self setscriptablepartstate( "sixthsense_audio", "off", 0 );
+}
+
+// =====================================================================
+// LGM-1 PaP IV - SAUCER STRIKE (level.cursed_lgm_strike_count ZOMBIES PER SHOT)
+// =====================================================================
+// Shots are counted from the player's weapon_fired notify (the same notify
+// the stock LGM-1 script launches a squadron on). The first LGM-1 damage
+// event after a shot (a saucer tick) starts one strike around the zombie it
+// hit: the strike_count nearest normal / armored zombies within
+// strike_radius (the hit zombie included) take a lethal LGM-1 hit, which
+// goes through ww_instakill_damage (one-hit at PaP III+, killondamage for
+// armored). Strike hits belong to the same shot, so they never start
+// another strike.
+function private install_lgm_strike()
+{
+    level.cursed_lgm_strike_count = 10;
+    level.cursed_lgm_strike_radius = 400;
+    level callback::add( #"player_spawned", &lgm_on_player_spawned );
+}
+
+function private lgm_on_player_spawned( params )
+{
+    if ( !supported_mode() || !isplayer( self ) )
+    {
+        return;
+    }
+    self thread lgm_shot_counter();
+}
+
+function private lgm_shot_counter()
+{
+    self notify( #"cursed_lgm_shot_counter" );
+    self endon( #"cursed_lgm_shot_counter" );
+    self endon( #"death_or_disconnect" );
+    level endon( #"game_ended" );
+    if ( !isdefined( self.cursed_lgm_shot ) )
+    {
+        self.cursed_lgm_shot = 0;
+    }
+    while ( true )
+    {
+        self waittill( #"weapon_fired", weapon );
+        if ( isdefined( weapon ) && weapon.basename == "sat_ww_ruby_zm" )
+        {
+            self.cursed_lgm_shot = self.cursed_lgm_shot + 1;
+        }
+    }
+}
+
+// self = the zombie the saucer tick hit.
+function private lgm_strike_check( attacker, weapon )
+{
+    shot = attacker.cursed_lgm_shot ?? 0;
+    if ( attacker.cursed_lgm_strike_shot === shot )
+    {
+        return;
+    }
+    attacker.cursed_lgm_strike_shot = shot;
+    level thread lgm_strike( self.origin, attacker, weapon );
+}
+
+// Runs a frame after the tick, outside the damage callback.
+function private lgm_strike( origin, attacker, weapon )
+{
+    level endon( #"game_ended" );
+    waitframe();
+    if ( !isdefined( attacker ) || !isplayer( attacker ) || !isdefined( weapon ) )
+    {
+        return;
+    }
+    picked = [];
+    for ( n = 0; n < level.cursed_lgm_strike_count; n++ )
+    {
+        best = undefined;
+        best_dist = undefined;
+        foreach ( ent in getaiarrayinradius( origin, level.cursed_lgm_strike_radius ) )
+        {
+            if ( !isdefined( ent ) || !isalive( ent ) || ent.team == attacker.team || arraycontains( picked, ent ) )
+            {
+                continue;
+            }
+            if ( !( ent.aicategory === "normal" ) || istrue( ent.damageshield ) || istrue( ent.ignore_ufogun ) )
+            {
+                continue;
+            }
+            dist = distancesquared( origin, ent.origin );
+            if ( !isdefined( best_dist ) || dist < best_dist )
+            {
+                best = ent;
+                best_dist = dist;
+            }
+        }
+        if ( !isdefined( best ) )
+        {
+            break;
+        }
+        picked[ picked.size ] = best;
+    }
+    foreach ( ent in picked )
+    {
+        if ( isdefined( ent ) && isalive( ent ) )
+        {
+            ent dodamage( ent.health + 1, ent.origin, attacker, attacker, "MOD_RIFLE_BULLET", weapon, "torso_upper" );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Mister Peeks Mayhem - Ray Gun / Ray Gun Mk 2 box chance reduced: a roll
+// keeps them level.cursed_peeks_raygun_keep % of the time.
+// "magicbox_used" runs in the same frame as setup_magicbox_weapon_array().
+// On a failed keep roll, both Ray Guns get item limit 0 for this one frame,
+// so the stock limit check (function_239d5db0d6aabc4c) re-rolls them from
+// the normal weapon list. Limits are restored the next frame.
+// ---------------------------------------------------------------------------
+function private box_half_rayguns_peeks( params )
+{
+    if ( game_utility::getgametype() != "zm_rb_rh_mod" || !isdefined( level.a_magicbox_item_limits ) )
+    {
+        return;
+    }
+    if ( !isdefined( level.cursed_peeks_raygun_keep ) )
+    {
+        level.cursed_peeks_raygun_keep = 80;
+    }
+    if ( randomfloat( 100 ) < level.cursed_peeks_raygun_keep )
+    {
+        return;
+    }
+    // Ray Gun, Ray Gun Mk 2 (Mk 2 entry name is hashed in the dump).
+    keys = [ %"itemspawnentry:zm_sat_item_weapon_pi_raygun", %"hash_613157257e008eff" ];
+    saved = [];
+    foreach ( i, key in keys )
+    {
+        if ( isdefined( level.a_magicbox_item_limits[ key ] ) )
+        {
+            saved[ i ] = level.a_magicbox_item_limits[ key ].itemmax;
+            level.a_magicbox_item_limits[ key ].itemmax = 0;
+        }
+        else
+        {
+            level.a_magicbox_item_limits[ key ] = { #itemmax:0, #spawneditems:[] };
+        }
+    }
+    level thread box_restore_raygun_limits( keys, saved );
+}
+
+function private box_restore_raygun_limits( keys, saved )
+{
+    waitframe();
+    foreach ( i, key in keys )
+    {
+        if ( isdefined( saved[ i ] ) )
+        {
+            level.a_magicbox_item_limits[ key ].itemmax = saved[ i ];
+        }
+        else
+        {
+            level.a_magicbox_item_limits[ key ] = undefined;
+        }
+    }
 }
